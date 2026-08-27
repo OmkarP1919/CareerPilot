@@ -1,0 +1,85 @@
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+*.env
+*.env.*
+!*.env.example
+backend/.env
+frontend/.env
+backend/.env.*
+frontend/.env.*
+!backend/.env.example
+!frontend/.env.example
+
+# Firebase & Cloud Credentials
+*-firebase-adminsdk-*.json
+firebase-service-account.json
+backend/firebase-service-account.json
+*serviceAccount*.json
+*service-account*.json
+*.pem
+*.key
+
+# Python
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*/*/*/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+venv/
+.venv/
+env/
+ENV/
+backend/venv/
+backend/.venv/
+
+# Node & Frontend builds
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+build/
+frontend/build/
+.next/
+out/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# Uploads & logs
+uploads/
+backend/uploads/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing & Coverage
+coverage/
+htmlcov/
+.coverage
+.pytest_cache/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating System
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
