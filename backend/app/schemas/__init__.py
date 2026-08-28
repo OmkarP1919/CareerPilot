@@ -18,7 +18,7 @@ from app.schemas.profile import (
     CertificationResponse,
     FullProfileResponse,
 )
-from app.schemas.resume import ResumeResponse
+from app.schemas.resume import ResumeResponse, ResumeParsedResponse
 from app.schemas.job import JobCreate, JobUpdate, JobResponse
 from app.schemas.match import MatchResponse, SavedMatchResponse
 from app.schemas.application import ApplicationCreate, ApplicationUpdate, ApplicationResponse
@@ -43,6 +43,7 @@ __all__ = [
     "CertificationResponse",
     "FullProfileResponse",
     "ResumeResponse",
+    "ResumeParsedResponse",
     "JobCreate",
     "JobUpdate",
     "JobResponse",

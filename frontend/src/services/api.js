@@ -79,6 +79,14 @@ export const api = {
     return this.post("/jobs/discover/personalized", {});
   },
 
+  analyzeResume(jobId, resumeId) {
+    return this.post(`/jobs/${jobId}/resume-analysis`, { resume_id: resumeId });
+  },
+
+  getResumeAnalysis(jobId, resumeId) {
+    return this.get(`/jobs/${jobId}/resume-analysis/${resumeId}`);
+  },
+
   async uploadFile(endpoint, formData) {
     const token = await getToken();
     const headers = {};

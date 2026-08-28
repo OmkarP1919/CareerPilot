@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text
+from sqlalchemy.types import JSON
 from app.database.base import Base
 
 
@@ -17,5 +18,10 @@ class Resume(Base):
     file_path = Column(String, nullable=False)
     file_size = Column(String, nullable=True)
     is_master = Column(Boolean, default=False)
+    extracted_text = Column(Text, nullable=True)
+    parsed_data = Column(JSON, nullable=True)
+    parsing_status = Column(String, default="pending")
+    parsing_error = Column(Text, nullable=True)
+    parsed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

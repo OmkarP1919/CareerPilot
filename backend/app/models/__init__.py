@@ -3,6 +3,7 @@ from app.models.profile import Profile, Education, Skill, UserSkill, Project, Ex
 from app.models.resume import Resume
 from app.models.job import Job
 from app.models.job_match import JobMatch
+from app.models.resume_job_analysis import ResumeJobAnalysis
 from app.models.application import Application
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "Resume",
     "Job",
     "JobMatch",
+    "ResumeJobAnalysis",
     "Application",
 ]

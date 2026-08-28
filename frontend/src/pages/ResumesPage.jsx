@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../services/api";
 import EmptyState from "../components/EmptyState";
+import Modal from "../components/Modal";
 import { SkeletonCard } from "../components/Skeleton";
 import {
   FileText,
@@ -12,7 +13,25 @@ import {
   FileCheck,
   Calendar,
   HardDrive,
+  Sparkles,
+  GraduationCap,
+  Briefcase,
+  Folder,
+  Award,
+  Mail,
+  MapPin,
+  Link,
+  XCircle,
+  RefreshCw,
+  Phone,
 } from "lucide-react";
+
+const PARSING_STATUS_LABEL = {
+  pending: "Pending analysis",
+  processing: "Processing...",
+  completed: "Analyzed",
+  failed: "Analysis failed",
+};
 
 export default function ResumesPage() {
   const [resumes, setResumes] = useState([]);
@@ -20,6 +39,12 @@ export default function ResumesPage() {
   const [uploading, setUploading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+
+  // Resume Insights modal state.
+  const [insightsResume, setInsightsResume] = useState(null);
+  const [insights, setInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState(null);
 
   const notify = (msg, type = "success") => {
     setNotification({ msg, type });
@@ -57,12 +82,51 @@ export default function ResumesPage() {
       formData.append("file", file);
       const newResume = await api.uploadFile("/resumes", formData);
       setResumes((prev) => [newResume, ...prev]);
-      notify("Resume uploaded and indexed successfully.");
+      notify("Resume uploaded and analyzed successfully.");
     } catch (err) {
       notify(err.message || "Upload failed. Please try again.", "error");
     } finally {
       setUploading(false);
     }
+  };
+
+  const openInsights = async (resume) => {
+    setInsightsResume(resume);
+    setInsights(null);
+    setInsightsError(null);
+    setInsightsLoading(true);
+    try {
+      const data = await api.get(`/resumes/${resume.id}/parsed`);
+      setInsights(data);
+    } catch (err) {
+      setInsightsError(err.message || "Failed to load resume insights.");
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
+
+  const reparse = async () => {
+    if (!insightsResume) return;
+    notify("Re-analyzing resume...", "success");
+    setInsightsLoading(true);
+    try {
+      const data = await api.post(`/resumes/${insightsResume.id}/parse`, {});
+      setInsights(data);
+      setInsightsError(null);
+      notify("Resume re-analyzed successfully.");
+      fetchResumes();
+    } catch (err) {
+      setInsightsError(err.message || "Re-analysis failed.");
+      setInsights(null);
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
+
+  const closeInsights = () => {
+    setInsightsResume(null);
+    setInsights(null);
+    setInsightsError(null);
   };
 
   const handleFileInput = (e) => {
@@ -97,6 +161,7 @@ export default function ResumesPage() {
     try {
       await api.delete(`/resumes/${id}`);
       setResumes((prev) => prev.filter((r) => r.id !== id));
+      if (insightsResume && insightsResume.id === id) closeInsights();
       notify("Resume deleted.");
     } catch {
       notify("Failed to delete resume", "error");
@@ -149,6 +214,20 @@ export default function ResumesPage() {
           <span>{notification.msg}</span>
         </div>
       )}
+
+      {/* === Insights Modal === */}
+      <Modal
+        isOpen={!!insightsResume}
+        onClose={closeInsights}
+        title="Resume Insights"
+      >
+        <InsightsContent
+          insights={insights}
+          loading={insightsLoading}
+          error={insightsError}
+          onReparse={reparse}
+        />
+      </Modal>
 
       {/* === Upload Zone === */}
       <section className="card">
@@ -238,10 +317,28 @@ export default function ResumesPage() {
                           <span>Uploaded {new Date(resume.created_at).toLocaleDateString()}</span>
                         </span>
                       )}
+                      <span className={`parsing-status-chip parsing-${resume.parsing_status || "pending"}`}>
+                        {resume.parsing_status === "completed" ? (
+                          <CheckCircle2 size={12} />
+                        ) : resume.parsing_status === "failed" ? (
+                          <AlertCircle size={12} />
+                        ) : (
+                          <RefreshCw size={12} />
+                        )}
+                        <span>{PARSING_STATUS_LABEL[resume.parsing_status || "pending"]}</span>
+                      </span>
                     </div>
                   </div>
 
                   <div className="resume-doc-actions">
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => openInsights(resume)}
+                      type="button"
+                    >
+                      <Sparkles size={14} />
+                      <span>Insights</span>
+                    </button>
                     {!resume.is_master && (
                       <button
                         className="btn btn-outline btn-sm"
@@ -267,6 +364,223 @@ export default function ResumesPage() {
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+function InsightsContent({ insights, loading, error, onReparse }) {
+  if (loading) {
+    return (
+      <div className="resume-insights-loading">
+        <div className="spinner" />
+        <p>Analyzing resume...</p>
+      </div>
+    );
+  }
+
+  if (!insights) {
+    return (
+      <div className="resume-insight-error">
+        <XCircle size={20} />
+        <div>
+          <strong>Could not load resume insights.</strong>
+          <p>{error || "An unexpected error occurred."}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const status = insights.parsing_status || "pending";
+  const data = insights.data || {};
+  const basic = data.basic_info || {};
+  const skills = data.skills || [];
+  const education = data.education || [];
+  const experience = data.experience || [];
+  const projects = data.projects || [];
+  const certifications = data.certifications || [];
+
+  let summaryBlock = null;
+  let detailsBlock = null;
+
+  if (status === "failed" || insights.parsing_error) {
+    summaryBlock = (
+      <div className="resume-insight-error">
+        <AlertCircle size={20} />
+        <div>
+          <strong>We couldn't analyze this resume fully.</strong>
+          <p>{insights.parsing_error || "Resume analysis failed."}</p>
+        </div>
+      </div>
+    );
+  } else if (status === "pending" || status === "processing") {
+    summaryBlock = (
+      <div className="resume-insight-empty">
+        <RefreshCw size={20} />
+        <p>This resume has not been analyzed yet.</p>
+        <button className="btn btn-primary btn-sm" onClick={onReparse} type="button">
+          <RefreshCw size={14} />
+          <span>Analyze Resume</span>
+        </button>
+      </div>
+    );
+  } else if (!skills.length && !education.length && !experience.length && !projects.length && !certifications.length) {
+    summaryBlock = (
+      <div className="resume-insight-empty">
+        <Sparkles size={20} />
+        <p>No structured information could be extracted from this resume.</p>
+      </div>
+    );
+  } else {
+    summaryBlock = (
+      <div className="resume-insight-summary">
+        <span className="resume-insight-success-line">
+          <CheckCircle2 size={14} />
+          Resume analyzed successfully
+        </span>
+        <div className="resume-insight-counts">
+          <InsightCount icon={GraduationCap} label="Skills" value={skills.length} />
+          <InsightCount icon={FileText} label="Education" value={education.length} />
+          <InsightCount icon={Briefcase} label="Experience" value={experience.length} />
+          <InsightCount icon={Folder} label="Projects" value={projects.length} />
+          <InsightCount icon={Award} label="Certifications" value={certifications.length} />
+        </div>
+      </div>
+    );
+
+    detailsBlock = (
+      <div className="resume-insight-details">
+        {basic && Object.keys(basic).length > 0 && (
+          <div className="insight-section">
+            <h4 className="insight-section-title">Contact & Basic Info</h4>
+            <div className="insight-basic-grid">
+              {basic.name && (
+                <span className="insight-basic-item"><strong>{basic.name}</strong></span>
+              )}
+              {basic.email && (
+                <span className="insight-basic-item"><Mail size={13} /><span>{basic.email}</span></span>
+              )}
+              {basic.phone && (
+                <span className="insight-basic-item"><Phone size={13} /><span>{basic.phone}</span></span>
+              )}
+              {basic.location && (
+                <span className="insight-basic-item"><MapPin size={13} /><span>{basic.location}</span></span>
+              )}
+              {basic.linkedin && (
+                <span className="insight-basic-item"><Link size={13} /><span>{basic.linkedin}</span></span>
+              )}
+              {basic.github && (
+                <span className="insight-basic-item"><Link size={13} /><span>{basic.github}</span></span>
+              )}
+              {basic.portfolio && (
+                <span className="insight-basic-item"><Link size={13} /><span>{basic.portfolio}</span></span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {skills.length > 0 && (
+          <div className="insight-section">
+            <h4 className="insight-section-title">Skills ({skills.length})</h4>
+            <div className="insight-tags">
+              {skills.map((s, i) => (
+                <span className="skill-tag" key={`${s}-${i}`}>{s}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {education.length > 0 && (
+          <div className="insight-section">
+            <h4 className="insight-section-title">Education ({education.length})</h4>
+            {education.map((e, i) => (
+              <div className="insight-entry" key={`edu-${i}`}>
+                <strong>{[e.degree, e.field_of_study].filter(Boolean).join(" · ") || "Education"}</strong>
+                {e.institution && <span className="insight-muted">{e.institution}</span>}
+                {e.graduation_year && <span className="insight-muted">· {e.graduation_year}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {experience.length > 0 && (
+          <div className="insight-section">
+            <h4 className="insight-section-title">Experience ({experience.length})</h4>
+            {experience.map((x, i) => (
+              <div className="insight-entry" key={`exp-${i}`}>
+                <strong>{[x.job_title, x.company].filter(Boolean).join(" — ") || "Experience"}</strong>
+                {x.dates && <span className="insight-muted">{x.dates}</span>}
+                {x.description && <p className="insight-desc">{x.description}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {projects.length > 0 && (
+          <div className="insight-section">
+            <h4 className="insight-section-title">Projects ({projects.length})</h4>
+            {projects.map((p, i) => (
+              <div className="insight-entry" key={`proj-${i}`}>
+                <strong>{p.name || "Project"}</strong>
+                {p.technologies && p.technologies.length > 0 && (
+                  <div className="insight-tags">
+                    {p.technologies.map((t, j) => (
+                      <span className="skill-tag" key={`${t}-${j}`}>{t}</span>
+                    ))}
+                  </div>
+                )}
+                {p.description && <p className="insight-desc">{p.description}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {certifications.length > 0 && (
+          <div className="insight-section">
+            <h4 className="insight-section-title">Certifications ({certifications.length})</h4>
+            <div className="insight-tags">
+              {certifications.map((c, i) => (
+                <span className="skill-tag" key={`cert-${i}`}>{c}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="resume-insights">
+      <div className="resume-insights-header">
+        <span className={`parsing-status-chip parsing-${status}`}>
+          {status === "completed" ? <CheckCircle2 size={12} /> : status === "failed" ? <XCircle size={12} /> : <RefreshCw size={12} />}
+          <span>{PARSING_STATUS_LABEL[status] || status}</span>
+        </span>
+        {status === "completed" && insights.parsing_error && (
+          <button className="btn btn-ghost btn-sm" onClick={onReparse} type="button">
+            <RefreshCw size={14} />
+            <span>Re-analyze</span>
+          </button>
+        )}
+        {(status === "failed" || status === "pending" || status === "processing") && (
+          <button className="btn btn-ghost btn-sm" onClick={onReparse} type="button">
+            <RefreshCw size={14} />
+            <span>Re-analyze</span>
+          </button>
+        )}
+      </div>
+
+      {summaryBlock}
+      {detailsBlock}
+    </div>
+  );
+}
+
+function InsightCount({ icon: Icon, label, value }) {
+  return (
+    <div className="insight-count">
+      <span className="insight-count-icon"><Icon size={14} /></span>
+      <span className="insight-count-value">{value}</span>
+      <span className="insight-count-label">{label}</span>
     </div>
   );
 }

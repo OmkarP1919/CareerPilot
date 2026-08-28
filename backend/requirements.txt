@@ -8,3 +8,4 @@ python-dotenv==1.2.2
 firebase-admin==7.5.0
 python-multipart==0.0.32
 httpx==0.28.1
+PyMuPDF==1.28.2
