@@ -98,6 +98,44 @@ export const api = {
     return this.get("/resumes/tailored");
   },
 
+  async downloadTailoredResume(id, format) {
+    const token = await getToken();
+    const headers = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/resumes/tailored/${id}/export/${format}`,
+      { headers }
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: "Download failed" }));
+      throw new Error(error.detail || `Download failed: ${response.status}`);
+    }
+
+    let filename = "";
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = /filename="?([^"]+)"?/.exec(disposition);
+    if (match) filename = match[1];
+    if (!filename) {
+      filename = `CareerPilot_Tailored_Resume.${format === "pdf" ? "pdf" : "docx"}`;
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    return { filename };
+  },
+
   async uploadFile(endpoint, formData) {
     const token = await getToken();
     const headers = {};

@@ -12,7 +12,10 @@ import {
   ArrowLeft,
   Save,
   Loader2,
+  FileDown,
 } from "lucide-react";
+import { useState } from "react";
+import { api } from "../services/api";
 
 function Chips({ items, tone }) {
   if (!items || items.length === 0) return null;
@@ -91,6 +94,25 @@ function educCaption(e) {
 export default function TailoredResult({ result, jobTitle, jobCompany, onRegenerate, onTailorAnother, onBack, hideActions = false, regenerating = false }) {
   const original = result.original_content || {};
   const tailored = result.tailored_content || {};
+
+  const [downloading, setDownloading] = useState(null);
+  const [downloadMsg, setDownloadMsg] = useState(null);
+
+  const handleDownload = async (fmt) => {
+    setDownloading(fmt);
+    setDownloadMsg(null);
+    try {
+      const { filename } = await api.downloadTailoredResume(result.id, fmt);
+      setDownloadMsg({
+        type: "success",
+        text: `${fmt === "pdf" ? "PDF" : "DOCX"} downloaded successfully.${filename ? ` (${filename})` : ""}`,
+      });
+    } catch {
+      setDownloadMsg({ type: "error", text: "Download failed. Please try again." });
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   const changes = result.changes || [];
   const supported = result.supported_keywords_added || [];
@@ -366,6 +388,41 @@ export default function TailoredResult({ result, jobTitle, jobCompany, onRegener
             )}
           </div>
         </div>
+      )}
+
+      {/* Downloads */}
+      {result.id && (
+        <>
+          <div className="tailored-result-downloads" role="group" aria-label="Download resume">
+            <span className="tailored-result-downloads-label">Download:</span>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => handleDownload("pdf")}
+              type="button"
+              disabled={!!downloading}
+            >
+              {downloading === "pdf" ? <Loader2 size={15} className="spin" /> : <FileDown size={15} />}
+              <span>{downloading === "pdf" ? "Downloading PDF..." : "Download PDF"}</span>
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => handleDownload("docx")}
+              type="button"
+              disabled={!!downloading}
+            >
+              {downloading === "docx" ? <Loader2 size={15} className="spin" /> : <FileDown size={15} />}
+              <span>{downloading === "docx" ? "Downloading DOCX..." : "Download DOCX"}</span>
+            </button>
+          </div>
+          {downloadMsg && (
+            <p
+              className={`tailored-download-msg ${downloadMsg.type === "error" ? "tailored-download-msg-error" : ""}`}
+              role="status"
+            >
+              {downloadMsg.text}
+            </p>
+          )}
+        </>
       )}
 
       {/* Actions */}

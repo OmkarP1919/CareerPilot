@@ -3486,6 +3486,31 @@
   flex-wrap: wrap;
 }
 
+/* --- Result downloads --- */
+.tailored-result-downloads {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+.tailored-result-downloads-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+.tailored-download-msg {
+  margin-top: var(--space-2);
+  font-size: var(--text-2xs);
+  color: var(--accent);
+}
+.tailored-download-msg-error {
+  color: var(--danger, #b91c1c);
+}
+
 /* --- Resumes page: tailored versions list --- */
 .tailored-versions-list {
   display: flex;
@@ -3533,6 +3558,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.tailored-version-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 /* --- Viewer modal (Resumes page) --- */

@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Phone,
   Wand2,
+  FileDown,
 } from "lucide-react";
 
 const PARSING_STATUS_LABEL = {
@@ -52,6 +53,7 @@ export default function ResumesPage() {
   const [tailored, setTailored] = useState([]);
   const [tailoredLoading, setTailoredLoading] = useState(true);
   const [viewTailored, setViewTailored] = useState(null);
+  const [downloadingKey, setDownloadingKey] = useState(null);
 
   const notify = (msg, type = "success") => {
     setNotification({ msg, type });
@@ -85,6 +87,19 @@ export default function ResumesPage() {
     fetchResumes();
     fetchTailored();
   }, [fetchResumes, fetchTailored]);
+
+  const handleDownload = async (t, fmt) => {
+    const key = `${t.id}:${fmt}`;
+    setDownloadingKey(key);
+    try {
+      await api.downloadTailoredResume(t.id, fmt);
+      notify(`${fmt.toUpperCase()} downloaded successfully.`);
+    } catch {
+      notify("Download failed. Please try again.", "error");
+    } finally {
+      setDownloadingKey(null);
+    }
+  };
 
   const handleUpload = async (file) => {
     if (!file) return;
@@ -425,14 +440,34 @@ export default function ResumesPage() {
                         : ""}
                     </span>
                   </div>
-                  <button
-                    className="btn btn-outline btn-sm"
-                    onClick={() => setViewTailored(t)}
-                    type="button"
-                  >
-                    <Sparkles size={14} />
-                    <span>View</span>
-                  </button>
+                  <div className="tailored-version-actions">
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => handleDownload(t, "pdf")}
+                      type="button"
+                      disabled={!!downloadingKey}
+                    >
+                      {downloadingKey === `${t.id}:pdf` ? <RefreshCw size={14} className="spin" /> : <FileDown size={14} />}
+                      <span>PDF</span>
+                    </button>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => handleDownload(t, "docx")}
+                      type="button"
+                      disabled={!!downloadingKey}
+                    >
+                      {downloadingKey === `${t.id}:docx` ? <RefreshCw size={14} className="spin" /> : <FileDown size={14} />}
+                      <span>DOCX</span>
+                    </button>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => setViewTailored(t)}
+                      type="button"
+                    >
+                      <Sparkles size={14} />
+                      <span>View</span>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
