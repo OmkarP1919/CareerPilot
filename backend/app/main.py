@@ -7,6 +7,8 @@ from app.api.resumes import router as resumes_router
 from app.api.jobs import router as jobs_router
 from app.api.match import router as match_router
 from app.api.resume_analysis import router as resume_analysis_router
+from app.api.resume_tailoring import router as resume_tailoring_router
+from app.api.resume_tailoring import tailored_list_router
 from app.api.applications import router as applications_router
 from app.api.analytics import router as analytics_router
 from app.database.base import Base, engine
@@ -34,6 +36,8 @@ app.include_router(resumes_router)
 app.include_router(jobs_router)
 app.include_router(match_router)
 app.include_router(resume_analysis_router)
+app.include_router(resume_tailoring_router)
+app.include_router(tailored_list_router)
 app.include_router(applications_router)
 app.include_router(analytics_router)
 

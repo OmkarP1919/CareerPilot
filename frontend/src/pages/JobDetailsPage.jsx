@@ -3,6 +3,8 @@ import { useParams, Link } from "react-router-dom";
 import { api } from "../services/api";
 import { SkeletonCard } from "../components/Skeleton";
 import Modal from "../components/Modal";
+import TailoringModal from "../components/TailoringModal";
+import TailoredResult from "../components/TailoredResult";
 import {
   ArrowLeft,
   MapPin,
@@ -23,6 +25,7 @@ import {
   Loader2,
   GraduationCap,
   Gauge,
+  Wand2,
 } from "lucide-react";
 
 function ResumeMatchResult({ analysis, onReset }) {
@@ -288,6 +291,13 @@ export default function JobDetailsPage() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
 
+  // Tailor My Resume state.
+  const [tailorOpen, setTailorOpen] = useState(false);
+  const [tailorResult, setTailorResult] = useState(null);
+  const [tailorSelectedResumeId, setTailorSelectedResumeId] = useState(null);
+  const [tailorRegenerating, setTailorRegenerating] = useState(false);
+  const [tailorError, setTailorError] = useState(null);
+
   useEffect(() => {
     const loadJob = async () => {
       try {
@@ -341,6 +351,42 @@ export default function JobDetailsPage() {
     } finally {
       setAnalysisLoading(false);
     }
+  };
+
+  const openTailor = () => {
+    setTailorResult(null);
+    setTailorError(null);
+    setTailorOpen(true);
+  };
+
+  const closeTailor = () => {
+    setTailorOpen(false);
+  };
+
+  const handleTailorSuccess = (result) => {
+    setTailorOpen(false);
+    setTailorError(null);
+    setTailorSelectedResumeId(result?.resume_id || null);
+    setTailorResult(result);
+  };
+
+  const handleRegenerate = async () => {
+    if (!window.confirm("Generate a new version?")) return;
+    if (!tailorSelectedResumeId) return;
+    setTailorRegenerating(true);
+    setTailorError(null);
+    try {
+      const result = await api.tailorResume(id, tailorSelectedResumeId, true);
+      setTailorResult(result);
+    } catch (err) {
+      setTailorError(err.message || "Resume regeneration failed.");
+    } finally {
+      setTailorRegenerating(false);
+    }
+  };
+
+  const handleTailorBack = () => {
+    setTailorResult(null);
   };
 
   if (loading) {
@@ -506,6 +552,35 @@ export default function JobDetailsPage() {
         )}
       </Modal>
 
+      {/* === Tailor My Resume Modal === */}
+      <TailoringModal
+        job={job}
+        isOpen={tailorOpen}
+        onClose={closeTailor}
+        onSuccess={handleTailorSuccess}
+      />
+
+      {/* === Inline Tailored Result === */}
+      {tailorResult && (
+        <div className="tailored-result-wrap">
+          {tailorError && (
+            <div className="alert alert-error" role="alert">
+              <AlertCircle size={16} />
+              <span>{tailorError}</span>
+            </div>
+          )}
+          <TailoredResult
+            result={tailorResult}
+            jobTitle={job.title}
+            jobCompany={job.company}
+            onRegenerate={handleRegenerate}
+            onTailorAnother={openTailor}
+            onBack={handleTailorBack}
+            regenerating={tailorRegenerating}
+          />
+        </div>
+      )}
+
       {/* === Hero Role Header === */}
       <header className="job-workspace-header">
         <div className="job-workspace-top">
@@ -520,11 +595,15 @@ export default function JobDetailsPage() {
           </div>
 
           <div className="job-workspace-primary-cta">
+            <button className="btn btn-primary btn-lg" onClick={openTailor} type="button">
+              <Wand2 size={18} />
+              <span>Tailor My Resume</span>
+            </button>
             <button className="btn btn-outline btn-lg" onClick={openAnalyze} type="button">
               <FileSearch size={18} />
               <span>Analyze Resume</span>
             </button>
-            <Link to={`/discover/${job.id}/match`} className="btn btn-primary btn-lg">
+            <Link to={`/discover/${job.id}/match`} className="btn btn-secondary btn-lg">
               <Sparkles size={18} />
               <span>Run Match Analysis</span>
             </Link>
@@ -612,6 +691,26 @@ export default function JobDetailsPage() {
                 <Sparkles size={16} />
                 <span>Inspect Match Breakdown</span>
               </Link>
+            </div>
+          </div>
+
+          {/* Tailor My Resume Callout */}
+          <div className="card">
+            <div className="card-header">
+              <h3>
+                <Wand2 size={16} className="text-accent" />
+                <span>Tailor My Resume</span>
+              </h3>
+            </div>
+            <div className="card-body">
+              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+                Generate a resume version tailored to this role. Your original
+                resume stays unchanged.
+              </p>
+              <button className="btn btn-primary btn-block" onClick={openTailor} type="button">
+                <Wand2 size={16} />
+                <span>Tailor My Resume</span>
+              </button>
             </div>
           </div>
 

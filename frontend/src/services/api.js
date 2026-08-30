@@ -87,6 +87,17 @@ export const api = {
     return this.get(`/jobs/${jobId}/resume-analysis/${resumeId}`);
   },
 
+  tailorResume(jobId, resumeId, regenerate = false) {
+    return this.post(`/jobs/${jobId}/resume-tailor`, {
+      resume_id: resumeId,
+      regenerate,
+    });
+  },
+
+  getTailoredResumes() {
+    return this.get("/resumes/tailored");
+  },
+
   async uploadFile(endpoint, formData) {
     const token = await getToken();
     const headers = {};

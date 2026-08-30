@@ -9,6 +9,14 @@ class Settings(BaseSettings):
     ADZUNA_APP_KEY: str = ""
     ADZUNA_COUNTRY: str = "us"
 
+    # AI resume tailoring (Phase 3A). Optional - the application must fail
+    # gracefully when these are not configured.
+    AI_PROVIDER: str = ""            # e.g. "openai"
+    AI_API_KEY: str = ""             # never hardcoded, read from env
+    AI_MODEL: str = ""               # e.g. "gpt-4o-mini"
+    AI_BASE_URL: str = ""            # optional custom OpenAI-compatible endpoint (e.g. OpenRouter)
+    AI_TIMEOUT_SECONDS: float = 60.0
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

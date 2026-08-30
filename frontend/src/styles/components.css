@@ -687,6 +687,10 @@
   animation: popIn var(--duration-base) var(--ease-out);
 }
 
+.modal-wide {
+  max-width: 920px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;

@@ -3115,3 +3115,476 @@
 }
 
 
+/* ===========================================================================
+   AI Resume Tailoring (Phase 3B)
+   =========================================================================== */
+
+.flip-h {
+  transform: scaleX(-1);
+}
+
+/* --- Tailoring modal: actions / footer --- */
+.modal-footer-inline {
+  display: flex;
+  gap: var(--space-3);
+}
+.modal-footer-inline .btn-block {
+  flex: 1;
+}
+
+/* --- Loading step --- */
+.tailor-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-12) 0;
+  text-align: center;
+}
+.tailor-loading-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+.tailor-loading-sub {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 320px;
+}
+
+/* --- Confirm step --- */
+.tailor-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.tailor-confirm-card,
+.tailor-confirm-row {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.tailor-confirm-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.tailor-confirm-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tailor-confirm-resume {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+.tailor-confirm-job {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* --- Trust / safety note --- */
+.tailor-trust-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--info-light, rgba(59, 130, 246, 0.1));
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.tailor-trust-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--info, #2563eb);
+}
+
+/* --- Pick step intro --- */
+.tailor-pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.tailor-pick-intro {
+  margin: 0;
+}
+
+/* --- Inline tailored result (Job Details page) --- */
+.tailored-result-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.tailored-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tailored-result-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, rgba(13, 148, 136, 0.08), transparent 60%);
+}
+.tailored-result-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: var(--space-1);
+}
+.tailored-result-title {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+.tailored-result-meta {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.tailored-result-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.tailored-result-meta-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tailored-result-meta-value {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+.tailored-result-submeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.tailor-trust-banner {
+  background: var(--success-light, rgba(16, 185, 129, 0.12));
+}
+.tailor-trust-banner svg {
+  color: var(--success, #059669);
+}
+
+/* --- Warning lists --- */
+.tailor-warning-list {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+}
+.tailor-warning-list li {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* --- Before / After comparison --- */
+.tailor-ba {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.tailor-ba-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+.tailor-ba-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+.tailor-ba-col {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+.tailor-ba-col-tailored {
+  border-color: rgba(13, 148, 136, 0.35);
+}
+.tailor-ba-label {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tailor-ba-col .tailor-ba-label {
+  color: var(--text-tertiary);
+  background: var(--slate-50, #f8fafc);
+}
+.tailor-ba-col-tailored .tailor-ba-label {
+  color: var(--accent);
+  background: rgba(13, 148, 136, 0.08);
+}
+.tailor-ba-body {
+  padding: var(--space-3);
+}
+.tailor-ba-list {
+  margin: 0;
+  padding-left: var(--space-4);
+}
+.tailor-ba-list li {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+/* --- Tailored entries (experience / projects) --- */
+.tailored-entries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.tailor-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tailor-entry:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.tailor-entry-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.tailor-entry-head strong {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+.tailor-entry-company {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.tailor-sub-label {
+  display: block;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-1);
+}
+.tailor-entry-changes ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.tailor-entry-changes li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.tailor-entry-changes li svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* --- Summary / simple lists / tags --- */
+.tailored-summary-text {
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed, 1.7);
+  color: var(--text-primary);
+  margin: 0;
+  white-space: pre-wrap;
+}
+.tailor-simple-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.tailor-simple-list li {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+.tailored-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tailored-keyword-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.tailored-keyword-block:last-child {
+  margin-bottom: 0;
+}
+.tailor-keyword-note {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+.tailored-emph-hint {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+/* --- Result actions --- */
+.tailored-result-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* --- Resumes page: tailored versions list --- */
+.tailored-versions-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.tailored-version-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.tailored-version-icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-lg);
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tailored-version-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.tailored-version-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tailored-version-sub {
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Viewer modal (Resumes page) --- */
+.tailored-version-modal-body .tailored-result {
+  gap: var(--space-4);
+}
+.tailored-version-modal-body .tailored-result-header {
+  flex-direction: column;
+}
+.tailored-version-modal-body .tailor-ba-grid {
+  grid-template-columns: 1fr;
+}
+
+
+/* --- Responsive / accessibility --- */
+@media (max-width: 720px) {
+  .tailor-ba-grid {
+    grid-template-columns: 1fr;
+  }
+  .tailored-result-header {
+    flex-direction: column;
+  }
+  .tailored-result-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .tailored-result-actions .btn {
+    width: 100%;
+  }
+  .modal-footer-inline {
+    flex-direction: column;
+  }
+  .modal-footer-inline .btn {
+    width: 100%;
+  }
+  .tailored-version-row {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .tailor-pick-intro {
+    font-size: var(--text-sm);
+  }
+  .tailor-confirm-row {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .tailor-confirm-job {
+    text-align: left;
+  }
+}
+
+

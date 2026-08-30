@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef } from "react";
 import { X } from "lucide-react";
 
-export default function Modal({ isOpen, onClose, title, children, footer }) {
+export default function Modal({ isOpen, onClose, title, children, footer, wide }) {
   const modalRef = useRef(null);
   const previousFocus = useRef(null);
 
@@ -54,7 +54,7 @@ export default function Modal({ isOpen, onClose, title, children, footer }) {
 
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal" ref={modalRef} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal ${wide ? "modal-wide" : ""}`} ref={modalRef} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>
           <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} aria-label="Close">

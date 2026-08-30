@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "../services/api";
 import EmptyState from "../components/EmptyState";
 import Modal from "../components/Modal";
+import TailoredResult from "../components/TailoredResult";
 import { SkeletonCard } from "../components/Skeleton";
 import {
   FileText,
@@ -24,6 +25,7 @@ import {
   XCircle,
   RefreshCw,
   Phone,
+  Wand2,
 } from "lucide-react";
 
 const PARSING_STATUS_LABEL = {
@@ -46,6 +48,11 @@ export default function ResumesPage() {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState(null);
 
+  // Tailored versions state.
+  const [tailored, setTailored] = useState([]);
+  const [tailoredLoading, setTailoredLoading] = useState(true);
+  const [viewTailored, setViewTailored] = useState(null);
+
   const notify = (msg, type = "success") => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3500);
@@ -62,9 +69,22 @@ export default function ResumesPage() {
     }
   }, []);
 
+  const fetchTailored = useCallback(async () => {
+    setTailoredLoading(true);
+    try {
+      const data = await api.getTailoredResumes();
+      setTailored(Array.isArray(data) ? data : []);
+    } catch {
+      setTailored([]);
+    } finally {
+      setTailoredLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchResumes();
-  }, [fetchResumes]);
+    fetchTailored();
+  }, [fetchResumes, fetchTailored]);
 
   const handleUpload = async (file) => {
     if (!file) return;
@@ -364,6 +384,80 @@ export default function ResumesPage() {
           )}
         </div>
       </section>
+
+      {/* === Tailored Resume Versions === */}
+      <section className="card">
+        <div className="card-header">
+          <h2>
+            <Wand2 size={18} className="text-accent" />
+            <span>Tailored Resume Versions ({tailored.length})</span>
+          </h2>
+        </div>
+
+        <div className="card-body">
+          {tailoredLoading ? (
+            <div className="resume-insights-loading">
+              <div className="spinner" />
+              <p>Loading tailored versions...</p>
+            </div>
+          ) : tailored.length === 0 ? (
+            <EmptyState
+              icon={Wand2}
+              title="No tailored versions yet"
+              text="Open a job and use Tailor My Resume to create a version tuned for that role. Your original resume is never modified."
+            />
+          ) : (
+            <div className="tailored-versions-list">
+              {tailored.map((t) => (
+                <div className="tailored-version-row" key={t.id}>
+                  <div className="tailored-version-icon">
+                    <Wand2 size={18} />
+                  </div>
+                  <div className="tailored-version-details">
+                    <strong className="tailored-version-title">
+                      {t.job_title || "Untitled job"}
+                      {t.job_company ? ` at ${t.job_company}` : ""}
+                    </strong>
+                    <span className="tailored-version-sub">
+                      {t.source_resume_name || "Resume"}
+                      {t.created_at
+                        ? ` · Created ${new Date(t.created_at).toLocaleDateString()}`
+                        : ""}
+                    </span>
+                  </div>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => setViewTailored(t)}
+                    type="button"
+                  >
+                    <Sparkles size={14} />
+                    <span>View</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* === Tailored Version Viewer Modal === */}
+      <Modal
+        isOpen={!!viewTailored}
+        onClose={() => setViewTailored(null)}
+        title="Tailored Resume Version"
+        wide
+      >
+        {viewTailored && (
+          <div className="tailored-version-modal-body">
+            <TailoredResult
+              result={viewTailored}
+              jobTitle={viewTailored.job_title}
+              jobCompany={viewTailored.job_company}
+              hideActions
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
