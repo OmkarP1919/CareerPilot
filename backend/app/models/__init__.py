@@ -5,6 +5,7 @@ from app.models.job import Job
 from app.models.job_match import JobMatch
 from app.models.resume_job_analysis import ResumeJobAnalysis
 from app.models.tailored_resume import TailoredResume
+from app.models.cover_letter import CoverLetter
 from app.models.application import Application
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "JobMatch",
     "ResumeJobAnalysis",
     "TailoredResume",
+    "CoverLetter",
     "Application",
 ]

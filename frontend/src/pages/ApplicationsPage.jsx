@@ -5,11 +5,13 @@ import { useTranslation } from "../context/LanguageContext";
 import EmptyState from "../components/EmptyState";
 import { SkeletonCard } from "../components/Skeleton";
 import Modal from "../components/Modal";
+import CoverLetterModal from "../components/CoverLetterModal";
 import {
   Layers,
   Plus,
   Trash2,
   ArrowRight,
+  FileText,
 } from "lucide-react";
 
 const PIPELINE_STAGES = ["Saved", "Applied", "Interview", "Offer"];
@@ -20,6 +22,10 @@ export default function ApplicationsPage() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
+
+  // Cover letters for the selected job
+  const [coverLetters, setCoverLetters] = useState([]);
+  const [viewCoverLetter, setViewCoverLetter] = useState(null);
 
   // Detail / Edit modal
   const [selectedApp, setSelectedApp] = useState(null);
@@ -34,12 +40,14 @@ export default function ApplicationsPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [apps, jobsData] = await Promise.all([
+      const [apps, jobsData, letters] = await Promise.all([
         api.get("/applications/"),
         api.get("/jobs/"),
+        api.getCoverLetters().catch(() => []),
       ]);
       setApplications(Array.isArray(apps) ? apps : []);
       setJobs(Array.isArray(jobsData) ? jobsData : []);
+      setCoverLetters(Array.isArray(letters) ? letters : []);
     } catch {
       notify("Failed to load applications.", "error");
     } finally {
@@ -50,6 +58,11 @@ export default function ApplicationsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const getCoverLetterForJob = (jobId) => {
+    const numeric = parseInt(jobId, 10);
+    return coverLetters.find((cl) => cl.job_id === jobId || cl.job_id === numeric) || null;
+  };
 
   const getJobForApp = (app) => {
     return jobs.find((j) => j.id === app.job_id) || {
@@ -390,6 +403,19 @@ export default function ApplicationsPage() {
             </div>
 
             <div className="modal-footer" style={{ marginTop: "var(--space-6)" }}>
+              {(() => {
+                const coverLetter = getCoverLetterForJob(selectedApp.job_id);
+                return coverLetter ? (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => setViewCoverLetter(coverLetter)}
+                  >
+                    <FileText size={14} />
+                    <span>View Cover Letter</span>
+                  </button>
+                ) : null;
+              })()}
               <Link to={`/discover/${selectedApp.job_id}`} className="btn btn-secondary btn-sm">
                 <span>View Job Details</span>
                 <ArrowRight size={14} />
@@ -404,6 +430,17 @@ export default function ApplicationsPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Cover Letter View Modal */}
+      {viewCoverLetter && (
+        <CoverLetterModal
+          isOpen={Boolean(viewCoverLetter)}
+          onClose={() => setViewCoverLetter(null)}
+          job={{ title: selectedApp?.job_title, company: selectedApp?.company_name }}
+          viewOnly
+          initialLetter={viewCoverLetter}
+        />
       )}
     </div>
   );

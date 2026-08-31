@@ -141,6 +141,25 @@ export const api = {
     return this.get("/resumes/tailored");
   },
 
+  generateCoverLetter(jobId, resumeId, regenerate = false) {
+    return this.post(`/jobs/${jobId}/cover-letter`, {
+      resume_id: resumeId,
+      regenerate,
+    });
+  },
+
+  getCoverLetter(jobId, resumeId) {
+    return this.get(`/jobs/${jobId}/cover-letter/${resumeId}`);
+  },
+
+  getCoverLetters() {
+    return this.get("/cover-letters");
+  },
+
+  deleteCoverLetter(id) {
+    return this.delete(`/cover-letters/${id}`);
+  },
+
   async downloadTailoredResume(id, format) {
     const token = await getToken();
     const headers = {};

@@ -7,6 +7,7 @@ import { SkeletonCard } from "../components/Skeleton";
 import Modal from "../components/Modal";
 import TailoringModal from "../components/TailoringModal";
 import TailoredResult from "../components/TailoredResult";
+import CoverLetterModal from "../components/CoverLetterModal";
 import {
   ArrowLeft,
   MapPin,
@@ -16,6 +17,7 @@ import {
   AlertTriangle,
   FileSearch,
   HelpCircle,
+  FileText,
 } from "lucide-react";
 
 export default function JobDetailsPage() {
@@ -44,6 +46,9 @@ export default function JobDetailsPage() {
   // Tailoring state
   const [tailorOpen, setTailorOpen] = useState(false);
   const [tailorResult, setTailorResult] = useState(null);
+
+  // Cover letter state
+  const [coverOpen, setCoverOpen] = useState(false);
 
   // Score explainer modal
   const [showScoreExplainer, setShowScoreExplainer] = useState(false);
@@ -230,6 +235,15 @@ export default function JobDetailsPage() {
             >
               <Sparkles size={18} />
               <span>{t("action.tailorResume", "Tailor My Resume")}</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setCoverOpen(true)}
+            >
+              <FileText size={16} />
+              <span>{t("cover.shortTitle", "Cover Letter")}</span>
             </button>
 
             <button
@@ -613,6 +627,15 @@ export default function JobDetailsPage() {
             setTailorOpen(false);
             setTailorResult(res);
           }}
+        />
+      )}
+
+      {/* Cover Letter Modal */}
+      {coverOpen && (
+        <CoverLetterModal
+          isOpen={coverOpen}
+          onClose={() => setCoverOpen(false)}
+          job={job}
         />
       )}
 

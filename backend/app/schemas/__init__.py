@@ -22,6 +22,12 @@ from app.schemas.resume import ResumeResponse, ResumeParsedResponse
 from app.schemas.job import JobCreate, JobUpdate, JobResponse
 from app.schemas.match import MatchResponse, SavedMatchResponse
 from app.schemas.application import ApplicationCreate, ApplicationUpdate, ApplicationResponse
+from app.schemas.cover_letter import (
+    CoverLetterContent,
+    CoverLetterRequest,
+    CoverLetterResponse,
+    CoverLetterListItem,
+)
 
 __all__ = [
     "UserResponse",
@@ -52,4 +58,8 @@ __all__ = [
     "ApplicationCreate",
     "ApplicationUpdate",
     "ApplicationResponse",
+    "CoverLetterContent",
+    "CoverLetterRequest",
+    "CoverLetterResponse",
+    "CoverLetterListItem",
 ]

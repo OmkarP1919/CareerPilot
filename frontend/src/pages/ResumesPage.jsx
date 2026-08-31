@@ -4,6 +4,7 @@ import { useTranslation } from "../context/LanguageContext";
 import EmptyState from "../components/EmptyState";
 import Modal from "../components/Modal";
 import TailoredResult from "../components/TailoredResult";
+import CoverLetterModal from "../components/CoverLetterModal";
 import { SkeletonCard } from "../components/Skeleton";
 import {
   FileText,
@@ -35,6 +36,11 @@ export default function ResumesPage() {
   const [viewTailored, setViewTailored] = useState(null);
   const [downloadingKey, setDownloadingKey] = useState(null);
 
+  // Cover letters state
+  const [coverLetters, setCoverLetters] = useState([]);
+  const [coverLoading, setCoverLoading] = useState(true);
+  const [viewCover, setViewCover] = useState(null);
+
   const notify = (msg, type = "success") => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3500);
@@ -63,10 +69,23 @@ export default function ResumesPage() {
     }
   }, []);
 
+  const fetchCoverLetters = useCallback(async () => {
+    setCoverLoading(true);
+    try {
+      const data = await api.getCoverLetters();
+      setCoverLetters(Array.isArray(data) ? data : []);
+    } catch {
+      setCoverLetters([]);
+    } finally {
+      setCoverLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchResumes();
     fetchTailored();
-  }, [fetchResumes, fetchTailored]);
+    fetchCoverLetters();
+  }, [fetchResumes, fetchTailored, fetchCoverLetters]);
 
   const handleFileUpload = async (file) => {
     if (!file) return;
@@ -131,6 +150,18 @@ export default function ResumesPage() {
       notify("Download failed. Please try again.", "error");
     } finally {
       setDownloadingKey(null);
+    }
+  };
+
+  const handleDeleteCoverLetter = async (id) => {
+    if (!window.confirm(t("cover.deleteConfirm", "Delete this cover letter?"))) return;
+    try {
+      await api.deleteCoverLetter(id);
+      setCoverLetters((prev) => prev.filter((cl) => cl.id !== id));
+      if (viewCover?.id === id) setViewCover(null);
+      notify(t("cover.deleted", "Cover letter deleted."));
+    } catch {
+      notify(t("cover.errGeneric", "Something went wrong. Please try again."), "error");
     }
   };
 
@@ -393,6 +424,73 @@ export default function ResumesPage() {
           </div>
         )}
       </section>
+
+      {/* =========================================================================
+          SECTION 3: COVER LETTERS
+          ========================================================================= */}
+      <section className="tailored-section" style={{ marginTop: "var(--space-8)" }}>
+        <div className="section-label-row">
+          <span className="section-eyebrow">{t("cover.shortTitle", "COVER LETTERS")}</span>
+        </div>
+
+        {coverLoading ? (
+          <SkeletonCard />
+        ) : coverLetters.length === 0 ? (
+          <div className="card empty-tailored-card">
+            <p className="text-secondary text-sm">
+              {t("cover.emptyDesc", "Create one from any job you're interested in.")}
+            </p>
+          </div>
+        ) : (
+          <div className="tailored-resumes-list">
+            {coverLetters.map((cl) => (
+              <div key={cl.id} className="card tailored-resume-row">
+                <div className="tailored-info">
+                  <div className="tailored-title-row">
+                    <strong>{cl.job_title || "Cover Letter"}</strong>
+                    {cl.job_company && <span className="tailored-company">· {cl.job_company}</span>}
+                  </div>
+                  <span className="tailored-date text-xs text-muted">
+                    {t("cover.createdOn", "Created")} {cl.created_at ? new Date(cl.created_at).toLocaleDateString() : "Recently"}
+                  </span>
+                </div>
+
+                <div className="tailored-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setViewCover(cl)}
+                  >
+                    <Eye size={14} />
+                    <span>{t("cover.view", "View")}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-icon btn-sm text-danger"
+                    onClick={() => handleDeleteCoverLetter(cl.id)}
+                    title={t("cover.delete", "Delete")}
+                    aria-label={t("cover.delete", "Delete")}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Cover letter view modal */}
+      {viewCover && (
+        <CoverLetterModal
+          isOpen={Boolean(viewCover)}
+          onClose={() => setViewCover(null)}
+          job={{ title: viewCover.job_title, company: viewCover.job_company }}
+          viewOnly
+          initialLetter={viewCover}
+        />
+      )}
 
       {/* =========================================================================
           RESUME INSIGHTS MODAL (Clean, Structured Summary)

@@ -10,6 +10,8 @@ from app.api.resume_analysis import router as resume_analysis_router
 from app.api.resume_tailoring import router as resume_tailoring_router
 from app.api.resume_tailoring import tailored_list_router
 from app.api.resume_export import router as resume_export_router
+from app.api.cover_letter import router as cover_letter_router
+from app.api.cover_letter import collection_router as cover_letter_collection_router
 from app.api.applications import router as applications_router
 from app.api.analytics import router as analytics_router
 from app.database.base import Base, engine
@@ -40,6 +42,8 @@ app.include_router(resume_analysis_router)
 app.include_router(resume_tailoring_router)
 app.include_router(tailored_list_router)
 app.include_router(resume_export_router)
+app.include_router(cover_letter_router)
+app.include_router(cover_letter_collection_router)
 app.include_router(applications_router)
 app.include_router(analytics_router)
 
