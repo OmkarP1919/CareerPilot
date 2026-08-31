@@ -52,6 +52,9 @@ def create_application(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    if data.status not in STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(STATUSES)}")
+
     existing = db.query(Application).filter(
         Application.user_id == user.id, Application.job_id == data.job_id
     ).first()

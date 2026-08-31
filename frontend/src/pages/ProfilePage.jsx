@@ -573,10 +573,10 @@ export default function ProfilePage() {
                     <div className="entity-title-row">
                       <h3 className="entity-name">{proj.name}</h3>
                       <div className="entity-actions">
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditProject(proj)} title="Edit">
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditProject(proj)} title="Edit" aria-label="Edit project">
                           <Edit3 size={14} />
                         </button>
-                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteProject(proj.id)} title="Delete">
+                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteProject(proj.id)} title="Delete" aria-label="Delete project">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -650,10 +650,10 @@ export default function ProfilePage() {
                         <span className="entity-subtitle">{exp.company}</span>
                       </div>
                       <div className="entity-actions">
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditExp(exp)} title="Edit">
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditExp(exp)} title="Edit" aria-label="Edit experience">
                           <Edit3 size={14} />
                         </button>
-                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteExp(exp.id)} title="Delete">
+                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteExp(exp.id)} title="Delete" aria-label="Delete experience">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -715,10 +715,10 @@ export default function ProfilePage() {
                         <span className="entity-subtitle">{edu.college}</span>
                       </div>
                       <div className="entity-actions">
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditEdu(edu)} title="Edit">
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditEdu(edu)} title="Edit" aria-label="Edit education">
                           <Edit3 size={14} />
                         </button>
-                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteEdu(edu.id)} title="Delete">
+                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteEdu(edu.id)} title="Delete" aria-label="Delete education">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -772,10 +772,10 @@ export default function ProfilePage() {
                         <span className="entity-subtitle">{cert.organization}</span>
                       </div>
                       <div className="entity-actions">
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditCert(cert)} title="Edit">
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditCert(cert)} title="Edit" aria-label="Edit certification">
                           <Edit3 size={14} />
                         </button>
-                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteCert(cert.id)} title="Delete">
+                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteCert(cert.id)} title="Delete" aria-label="Delete certification">
                           <Trash2 size={14} />
                         </button>
                       </div>

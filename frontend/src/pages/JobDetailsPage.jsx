@@ -58,7 +58,7 @@ export default function JobDetailsPage() {
     try {
       const [jobData, matchRes, appsRes] = await Promise.all([
         api.get(`/jobs/${id}`),
-        api.get(`/jobs/${id}/match`).catch(() => null),
+        api.get(`/jobs/${id}/analysis`).catch(() => null),
         api.get("/applications/").catch(() => []),
       ]);
 
@@ -168,13 +168,21 @@ export default function JobDetailsPage() {
   }
 
   const overallScore = matchData?.overall_score ?? job.match_score ?? 0;
-  const factorScores = matchData?.scores || {
-    skills: 90,
-    projects: 85,
-    experience: 75,
-    role: 88,
-    location: 95,
-  };
+  const factorScores = matchData
+    ? {
+        skills: matchData.skills_score ?? 0,
+        projects: matchData.project_score ?? 0,
+        experience: matchData.experience_score ?? 0,
+        role: matchData.role_score ?? 0,
+        location: matchData.location_score ?? 0,
+      }
+    : {
+        skills: 90,
+        projects: 85,
+        experience: 75,
+        role: 88,
+        location: 95,
+      };
 
   const matchedSkills = matchData?.matched_skills || job.required_skills?.slice(0, 4) || [];
   const missingSkills = matchData?.missing_skills || [];

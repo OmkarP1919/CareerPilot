@@ -219,7 +219,7 @@ def tailor_resume(
         provider = build_provider(settings)
     except AIProviderConfigurationError as exc:
         logger.warning("AI tailoring requested but not configured: %s", exc)
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(status_code=503, detail="AI service is not configured. Please try again later.")
 
     tailoring_input = TailoringInput(
         resume=resume.parsed_data or {},
