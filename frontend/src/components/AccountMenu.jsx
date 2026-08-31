@@ -3,18 +3,25 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
+import { useTranslation } from "../context/LanguageContext";
 import { getInitials } from "../utils/formatters";
-import { FileText, TrendingUp, Settings, LogOut, X } from "lucide-react";
-
-const MENU_ITEMS = [
-  { to: "/resumes", label: "Resumes Hub", icon: FileText, desc: "Manage master & tailored versions" },
-  { to: "/insights", label: "Career Insights", icon: TrendingUp, desc: "Skill gaps & funnel analytics" },
-  { to: "/settings", label: "Settings", icon: Settings, desc: "Account security & preferences" },
-];
+import {
+  User,
+  TrendingUp,
+  Settings,
+  LogOut,
+  X,
+  Sun,
+  Moon,
+  Globe,
+} from "lucide-react";
 
 export default function AccountMenu({ onClose, isMobile = false }) {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const { language, setLanguage, t } = useTranslation();
 
   const displayName = currentUser?.displayName || currentUser?.email?.split("@")[0] || "User";
   const email = currentUser?.email || "";
@@ -40,6 +47,12 @@ export default function AccountMenu({ onClose, isMobile = false }) {
     }
   };
 
+  const menuItems = [
+    { to: "/profile", label: t("nav.profile", "Profile"), icon: User, desc: "Skills, experience & education" },
+    { to: "/insights", label: t("nav.insights", "Insights"), icon: TrendingUp, desc: "Funnel & match analytics" },
+    { to: "/settings", label: t("nav.settings", "Settings"), icon: Settings, desc: "Appearance, language & privacy" },
+  ];
+
   if (isMobile) {
     return (
       <div
@@ -51,7 +64,7 @@ export default function AccountMenu({ onClose, isMobile = false }) {
       >
         <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
           <div className="mobile-sheet-handle" />
-          
+
           <div className="mobile-sheet-header">
             <div className="mobile-sheet-user">
               <div className="topnav-avatar">
@@ -76,7 +89,7 @@ export default function AccountMenu({ onClose, isMobile = false }) {
           </div>
 
           <nav className="mobile-sheet-nav">
-            {MENU_ITEMS.map((item) => (
+            {menuItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -95,6 +108,39 @@ export default function AccountMenu({ onClose, isMobile = false }) {
 
             <div className="mobile-sheet-divider" />
 
+            {/* Quick Controls in Mobile Drawer */}
+            <div className="mobile-sheet-controls">
+              <div className="control-row">
+                <span className="control-label">Theme</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                >
+                  {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+                  <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+                </button>
+              </div>
+
+              <div className="control-row">
+                <span className="control-label">Language</span>
+                <div className="lang-pills">
+                  {["en", "hi", "mr"].map((langCode) => (
+                    <button
+                      key={langCode}
+                      type="button"
+                      className={`lang-pill ${language === langCode ? "active" : ""}`}
+                      onClick={() => setLanguage(langCode)}
+                    >
+                      {langCode === "en" ? "EN" : langCode === "hi" ? "हिन्दी" : "मराठी"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mobile-sheet-divider" />
+
             <button
               onClick={handleLogout}
               className="mobile-sheet-item danger"
@@ -102,7 +148,7 @@ export default function AccountMenu({ onClose, isMobile = false }) {
             >
               <LogOut size={20} />
               <div className="mobile-sheet-item-info">
-                <span className="mobile-sheet-item-title">Sign Out</span>
+                <span className="mobile-sheet-item-title">{t("nav.signOut", "Sign Out")}</span>
               </div>
             </button>
           </nav>
@@ -123,7 +169,7 @@ export default function AccountMenu({ onClose, isMobile = false }) {
       </div>
 
       <div className="account-menu-list">
-        {MENU_ITEMS.map((item) => (
+        {menuItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -148,7 +194,7 @@ export default function AccountMenu({ onClose, isMobile = false }) {
         type="button"
       >
         <LogOut size={16} />
-        <span>Sign Out</span>
+        <span>{t("nav.signOut", "Sign Out")}</span>
       </button>
     </div>
   );

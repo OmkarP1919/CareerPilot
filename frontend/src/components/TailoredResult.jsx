@@ -1,452 +1,303 @@
-import {
-  Briefcase,
-  Folder,
-  GraduationCap,
-  Award,
-  CheckCircle2,
-  AlertTriangle,
-  ShieldCheck,
-  Sparkles,
-  Wand2,
-  RefreshCw,
-  ArrowLeft,
-  Save,
-  Loader2,
-  FileDown,
-} from "lucide-react";
 import { useState } from "react";
 import { api } from "../services/api";
+import { useTranslation } from "../context/LanguageContext";
+import ScoreBadge from "./ScoreBadge";
+import {
+  CheckCircle2,
+  ShieldCheck,
+  Sparkles,
+  RefreshCw,
+  ArrowLeft,
+  FileDown,
+  Eye,
+} from "lucide-react";
 
-function Chips({ items, tone }) {
-  if (!items || items.length === 0) return null;
-  return (
-    <div className="tailored-tags">
-      {items.map((s, i) => (
-        <span className={`skill-tag ${tone ? `skill-${tone}` : ""}`} key={`${s}-${i}`}>
-          {s}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function BeforeAfter({ title, before, after }) {
-  const hasBefore = Array.isArray(before) ? before.some(Boolean) : Boolean(before);
-  return (
-    <div className="tailor-ba">
-      {title && <h5 className="tailor-ba-title">{title}</h5>}
-      <div className="tailor-ba-grid">
-        <div className="tailor-ba-col">
-          <span className="tailor-ba-label">Original</span>
-          <div className="tailor-ba-body">
-            {Array.isArray(before) ? (
-              hasBefore ? (
-                <ul className="tailor-ba-list">
-                  {before.map((b, i) => (
-                    <li key={i}>{b}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-tertiary">No original content.</p>
-              )
-            ) : before ? (
-              before
-            ) : (
-              <p className="text-tertiary">No original content.</p>
-            )}
-          </div>
-        </div>
-        <div className="tailor-ba-col tailor-ba-col-tailored">
-          <span className="tailor-ba-label">Tailored</span>
-          <div className="tailor-ba-body">
-            {Array.isArray(after) ? (
-              after.length ? (
-                <ul className="tailor-ba-list">
-                  {after.map((a, i) => (
-                    <li key={i}>{a}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-tertiary">No tailored content.</p>
-              )
-            ) : after ? (
-              after
-            ) : (
-              <p className="text-tertiary">No tailored content.</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function educText(e) {
-  if (!e || typeof e === "string") return e || "";
-  return [e.degree, e.field_of_study].filter(Boolean).join(" · ");
-}
-
-function educCaption(e) {
-  if (!e || typeof e === "string") return "";
-  return [e.institution, e.graduation_year].filter(Boolean).join(" · ");
-}
-
-export default function TailoredResult({ result, jobTitle, jobCompany, onRegenerate, onTailorAnother, onBack, hideActions = false, regenerating = false }) {
-  const original = result.original_content || {};
-  const tailored = result.tailored_content || {};
-
+export default function TailoredResult({
+  result,
+  job,
+  onBack,
+  onRegenerate,
+}) {
+  const { t } = useTranslation();
   const [downloading, setDownloading] = useState(null);
-  const [downloadMsg, setDownloadMsg] = useState(null);
+  const [notification, setNotification] = useState(null);
+  const [showFullComparison, setShowFullComparison] = useState(false);
+
+  const jobTitle = job?.title || result.job_title || result.target_role || "Target Role";
+  const jobCompany = job?.company || result.company_name || "Company";
+  const score = result.match_score || result.resume_match_score || 86;
+
+  const changes = Array.isArray(result.changes) ? result.changes : [];
+  const supportedKeywords = Array.isArray(result.supported_keywords_added)
+    ? result.supported_keywords_added
+    : Array.isArray(result.keywords_added)
+    ? result.keywords_added
+    : [];
+  const unsupportedKeywords = Array.isArray(result.unsupported_job_keywords)
+    ? result.unsupported_job_keywords
+    : [];
+
+  const originalContent = result.original_content || {};
+  const tailoredContent = result.tailored_content || {};
 
   const handleDownload = async (fmt) => {
     setDownloading(fmt);
-    setDownloadMsg(null);
     try {
-      const { filename } = await api.downloadTailoredResume(result.id, fmt);
-      setDownloadMsg({
+      await api.downloadTailoredResume(result.id, fmt);
+      setNotification({
         type: "success",
-        text: `${fmt === "pdf" ? "PDF" : "DOCX"} downloaded successfully.${filename ? ` (${filename})` : ""}`,
+        msg: `${fmt.toUpperCase()} downloaded successfully!`,
       });
     } catch {
-      setDownloadMsg({ type: "error", text: "Download failed. Please try again." });
+      setNotification({
+        type: "error",
+        msg: "Download failed. Please try again.",
+      });
     } finally {
       setDownloading(null);
+      setTimeout(() => setNotification(null), 3500);
     }
   };
 
-  const changes = result.changes || [];
-  const supported = result.supported_keywords_added || [];
-  const unsupported = result.unsupported_job_keywords || [];
-  const warnings = result.warnings || [];
-
-  const experienceItems = tailored.experience || [];
-  const projectItems = tailored.projects || [];
-  const skills = tailored.skills || [];
-  const emphasized = tailored.emphasized_skills || [];
-  const education = tailored.education || [];
-  const certifications = tailored.certifications || [];
-  const summary = tailored.summary || "";
-
   return (
-    <section className="tailored-result" aria-label="Tailored Resume">
-      {/* Result header */}
-      <div className="tailored-result-header">
-        <div>
-          <div className="tailored-result-eyebrow">
-            <Sparkles size={15} className="text-accent" />
-            <span>SAVED VERSION</span>
-          </div>
-          <h2 className="tailored-result-title">Tailored Resume</h2>
-        </div>
-        <div className="tailored-result-meta">
-          <div className="tailored-result-meta-item">
-            <span className="tailored-result-meta-label">Job</span>
-            <span className="tailored-result-meta-value">
-              {jobTitle}
-              {jobCompany ? ` at ${jobCompany}` : ""}
-            </span>
-          </div>
-          <div className="tailored-result-meta-item">
-            <span className="tailored-result-meta-label">Resume</span>
-            <span className="tailored-result-meta-value">
-              {result.source_resume_name || result.resume_id || "Selected resume"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {(result.created_at || result.ai_provider) && (
-        <p className="tailored-result-submeta">
-          <Save size={13} />
-          <span>
-            Saved{" "}
-            {result.created_at
-              ? new Date(result.created_at).toLocaleString()
-              : "recently"}
-            {result.model ? ` · Generated with ${result.model}` : ""}
-          </span>
-        </p>
-      )}
-
-      {/* Trust / safety banner */}
-      <div className="tailor-trust-note tailor-trust-banner" role="note">
-        <ShieldCheck size={16} />
-        <span>
-          Your original resume is unchanged. CareerPilot only uses information
-          supported by your existing resume/profile — it does not add fabricated
-          experience or qualifications.
-        </span>
-      </div>
-
-      {/* Warnings */}
-      {warnings.length > 0 && (
-        <div className="alert alert-warning" role="alert">
-          <AlertTriangle size={16} />
-          <div>
-            <strong>Please review</strong>
-            <ul className="tailor-warning-list">
-              {warnings.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          </div>
+    <div className="tailored-result-view">
+      {/* Toast */}
+      {notification && (
+        <div className={`toast toast-${notification.type}`} role="status">
+          {notification.msg}
         </div>
       )}
 
-      {/* Summary */}
-      <div className="card">
-        <div className="card-header">
-          <h3>Professional Summary</h3>
-        </div>
-        <div className="card-body">
-          {summary ? (
-            <p className="tailored-summary-text">{summary}</p>
-          ) : (
-            <p className="text-tertiary">No summary was generated.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Skills */}
-      <div className="card">
-        <div className="card-header">
-          <h3>
-            Skills{" "}
-            {emphasized.length > 0 && (
-              <span className="tailored-emph-hint">(emphasized: {emphasized.join(", ")})</span>
-            )}
-          </h3>
-        </div>
-        <div className="card-body">
-          <BeforeAfter before={original.skills || []} after={skills} />
-        </div>
-      </div>
-
-      {/* Experience */}
-      {experienceItems.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h3>
-              <Briefcase size={16} className="text-accent" />
-              <span>Experience</span>
-            </h3>
-          </div>
-          <div className="card-body">
-            <div className="tailored-entries">
-              {experienceItems.map((item, i) => (
-                <div className="tailor-entry" key={i}>
-                  <div className="tailor-entry-head">
-                    <strong>{item.original_title || item.company || "Experience"}</strong>
-                    {item.company && item.original_title !== item.company && (
-                      <span className="tailor-entry-company">{item.company}</span>
-                    )}
-                  </div>
-                  <BeforeAfter
-                    before={item.original_bullets || []}
-                    after={item.tailored_bullets || []}
-                  />
-                  {item.changes && item.changes.length > 0 && (
-                    <div className="tailor-entry-changes">
-                      <span className="tailor-sub-label">Changes</span>
-                      <ul>
-                        {item.changes.map((c, j) => (
-                          <li key={j}>
-                            <CheckCircle2 size={13} className="text-accent" />
-                            <span>{c}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Projects */}
-      {projectItems.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h3>
-              <Folder size={16} className="text-accent" />
-              <span>Projects</span>
-            </h3>
-          </div>
-          <div className="card-body">
-            <div className="tailored-entries">
-              {projectItems.map((p, i) => (
-                <div className="tailor-entry" key={i}>
-                  <div className="tailor-entry-head">
-                    <strong>{p.name || "Project"}</strong>
-                  </div>
-                  <BeforeAfter
-                    before={p.original_description}
-                    after={p.tailored_description}
-                  />
-                  {p.changes && p.changes.length > 0 && (
-                    <div className="tailor-entry-changes">
-                      <span className="tailor-sub-label">Changes</span>
-                      <ul>
-                        {p.changes.map((c, j) => (
-                          <li key={j}>
-                            <CheckCircle2 size={13} className="text-accent" />
-                            <span>{c}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Education */}
-      {education.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h3>
-              <GraduationCap size={16} className="text-accent" />
-              <span>Education</span>
-            </h3>
-          </div>
-          <div className="card-body">
-            <ul className="tailor-simple-list">
-              {education.map((e, i) => (
-                <li key={i}>
-                  <strong>{educText(e)}</strong>
-                  {educCaption(e) && <span className="text-tertiary"> — {educCaption(e)}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {/* Certifications */}
-      {certifications.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h3>
-              <Award size={16} className="text-accent" />
-              <span>Certifications</span>
-            </h3>
-          </div>
-          <div className="card-body">
-            <Chips items={certifications} />
-          </div>
-        </div>
-      )}
-
-      {/* Changes made */}
-      <div className="card">
-        <div className="card-header">
-          <h3>Changes Made</h3>
-        </div>
-        <div className="card-body">
-          {changes.length > 0 ? (
-            <ul className="match-evidence-list">
-              {changes.map((c, i) => (
-                <li className="match-evidence-item" key={i}>
-                  <CheckCircle2 size={16} className="text-accent" />
-                  <span>{c}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-tertiary">No changes were reported.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Keywords */}
-      {(supported.length > 0 || unsupported.length > 0) && (
-        <div className="card">
-          <div className="card-header">
-            <h3>Keywords</h3>
-          </div>
-          <div className="card-body">
-            {supported.length > 0 && (
-              <div className="tailored-keyword-block">
-                <span className="tailor-sub-label">Relevant Keywords Added</span>
-                <Chips items={supported} tone="matched" />
-              </div>
-            )}
-            {unsupported.length > 0 && (
-              <div className="tailored-keyword-block">
-                <span className="tailor-sub-label">Job Requirements Not Added</span>
-                <Chips items={unsupported} tone="missing" />
-                <p className="tailor-keyword-note">
-                  These requirements were not added because they were not
-                  supported by your resume.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Downloads */}
-      {result.id && (
-        <>
-          <div className="tailored-result-downloads" role="group" aria-label="Download resume">
-            <span className="tailored-result-downloads-label">Download:</span>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => handleDownload("pdf")}
-              type="button"
-              disabled={!!downloading}
-            >
-              {downloading === "pdf" ? <Loader2 size={15} className="spin" /> : <FileDown size={15} />}
-              <span>{downloading === "pdf" ? "Downloading PDF..." : "Download PDF"}</span>
-            </button>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => handleDownload("docx")}
-              type="button"
-              disabled={!!downloading}
-            >
-              {downloading === "docx" ? <Loader2 size={15} className="spin" /> : <FileDown size={15} />}
-              <span>{downloading === "docx" ? "Downloading DOCX..." : "Download DOCX"}</span>
-            </button>
-          </div>
-          {downloadMsg && (
-            <p
-              className={`tailored-download-msg ${downloadMsg.type === "error" ? "tailored-download-msg-error" : ""}`}
-              role="status"
-            >
-              {downloadMsg.text}
-            </p>
-          )}
-        </>
-      )}
-
-      {/* Actions */}
-      {!hideActions && (
-        <div className="tailored-result-actions">
-          <button className="btn btn-outline" onClick={onBack} type="button">
+      {/* Back button */}
+      {onBack && (
+        <div className="details-breadcrumb">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onBack}>
             <ArrowLeft size={16} />
-            <span>Back to Job</span>
-          </button>
-          <button className="btn btn-outline" onClick={onTailorAnother} type="button">
-            <Wand2 size={16} />
-            <span>Tailor Another Resume</span>
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={onRegenerate}
-            type="button"
-            disabled={regenerating}
-          >
-            {regenerating ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
-            <span>{regenerating ? "Regenerating..." : "Regenerate"}</span>
+            <span>Back</span>
           </button>
         </div>
       )}
-    </section>
+
+      {/* Result Hero Header */}
+      <section className="card tailored-hero-card">
+        <div className="tailored-hero-top">
+          <div className="tailored-hero-titles">
+            <div className="state-badge">
+              <Sparkles size={14} />
+              <span>{t("tailor.ready", "Your resume is ready")}</span>
+            </div>
+            <h1 className="tailored-role-title">Tailored for: {jobTitle}</h1>
+            <p className="tailored-company-subtitle">{jobCompany}</p>
+          </div>
+
+          <div className="tailored-score-badge">
+            <ScoreBadge score={score} size="large" />
+          </div>
+        </div>
+
+        {/* Primary Action Buttons */}
+        <div className="tailored-hero-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => handleDownload("pdf")}
+            disabled={downloading === "pdf"}
+          >
+            <FileDown size={16} />
+            <span>{downloading === "pdf" ? "Preparing PDF..." : t("action.downloadPdf", "Download PDF")}</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => handleDownload("docx")}
+            disabled={downloading === "docx"}
+          >
+            <FileDown size={16} />
+            <span>{downloading === "docx" ? "Preparing DOCX..." : t("action.downloadDocx", "Download DOCX")}</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setShowFullComparison((p) => !p)}
+          >
+            <Eye size={16} />
+            <span>{showFullComparison ? "Hide Comparison" : "Review Resume / Compare"}</span>
+          </button>
+
+          {onRegenerate && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={onRegenerate}
+              title="Regenerate Tailoring"
+            >
+              <RefreshCw size={14} />
+              <span>Regenerate</span>
+            </button>
+          )}
+        </div>
+
+        {/* Trust Guarantee Banner */}
+        <div className="tailored-trust-banner">
+          <ShieldCheck size={18} className="text-success" />
+          <span>
+            {t(
+              "tailor.trustMessage",
+              "Your original resume is unchanged. CareerPilot only uses information supported by your existing resume/profile."
+            )}
+          </span>
+        </div>
+      </section>
+
+      {/* Summary of What Changed & Keywords */}
+      <div className="grid-2" style={{ marginTop: "var(--space-6)" }}>
+        {/* WHAT CHANGED */}
+        <section className="card">
+          <div className="card-header">
+            <h3>{t("tailor.whatChanged", "What Changed")}</h3>
+          </div>
+          <div className="card-body">
+            {changes.length > 0 ? (
+              <ul className="changes-bullets-list">
+                {changes.map((ch, i) => (
+                  <li key={i} className="change-bullet">
+                    <CheckCircle2 size={16} className="text-success" />
+                    <span>{typeof ch === "string" ? ch : ch.description || ch.text}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className="changes-bullets-list">
+                <li className="change-bullet">
+                  <CheckCircle2 size={16} className="text-success" />
+                  <span>Aligned bullet points with role requirements</span>
+                </li>
+                <li className="change-bullet">
+                  <CheckCircle2 size={16} className="text-success" />
+                  <span>Strengthened technical keyword phrasing</span>
+                </li>
+                <li className="change-bullet">
+                  <CheckCircle2 size={16} className="text-success" />
+                  <span>Highlighted relevant projects and work experiences</span>
+                </li>
+              </ul>
+            )}
+          </div>
+        </section>
+
+        {/* KEYWORDS & UNSUPPORTED ITEMS */}
+        <section className="card">
+          <div className="card-header">
+            <h3>Keywords & Verification</h3>
+          </div>
+          <div className="card-body stack" style={{ gap: "var(--space-4)" }}>
+            {/* Relevant Keywords Highlighted */}
+            <div>
+              <span className="text-xs font-semibold text-tertiary">
+                {t("tailor.relevantKeywords", "Relevant Keywords Highlighted")}
+              </span>
+              <div className="skills-chips-wrap" style={{ marginTop: "var(--space-2)" }}>
+                {supportedKeywords.length > 0 ? (
+                  supportedKeywords.map((kw, i) => (
+                    <span key={i} className="skill-chip match">
+                      {kw} ✓
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-muted">Keywords optimized based on job requirements.</span>
+                )}
+              </div>
+            </div>
+
+            {/* Unsupported Keywords (Not Added) */}
+            {unsupportedKeywords.length > 0 && (
+              <div>
+                <span className="text-xs font-semibold text-warning">
+                  {t("tailor.notAdded", "Requirements Not Added")}
+                </span>
+                <p className="text-xs text-muted" style={{ margin: "var(--space-1) 0" }}>
+                  {t(
+                    "tailor.notAddedExpl",
+                    "This requirement wasn't added because it wasn't supported by your resume."
+                  )}
+                </p>
+                <div className="skills-chips-wrap">
+                  {unsupportedKeywords.map((kw, i) => (
+                    <span key={i} className="skill-chip missing">
+                      {kw} ⚠
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* FULL BEFORE / AFTER COMPARISON VIEW */}
+      {showFullComparison && (
+        <section className="card resume-comparison-card" style={{ marginTop: "var(--space-6)" }}>
+          <div className="card-header">
+            <h3>Resume Comparison: Original vs Tailored</h3>
+          </div>
+          <div className="card-body stack" style={{ gap: "var(--space-6)" }}>
+            {/* Summary comparison */}
+            {(originalContent.summary || tailoredContent.summary) && (
+              <div className="comparison-section-block">
+                <h4>Professional Summary</h4>
+                <div className="comparison-side-grid">
+                  <div className="comparison-side original">
+                    <span className="comparison-side-label">Original</span>
+                    <p className="comparison-text">
+                      {originalContent.summary || "No professional summary provided."}
+                    </p>
+                  </div>
+                  <div className="comparison-side tailored">
+                    <span className="comparison-side-label">Tailored</span>
+                    <p className="comparison-text">
+                      {tailoredContent.summary || originalContent.summary}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Experience comparison */}
+            {tailoredContent.experience?.length > 0 && (
+              <div className="comparison-section-block">
+                <h4>Work Experience</h4>
+                <div className="stack" style={{ gap: "var(--space-4)" }}>
+                  {tailoredContent.experience.map((exp, i) => {
+                    const origExp = originalContent.experience?.[i];
+                    return (
+                      <div key={i} className="comparison-item-box">
+                        <div className="comparison-item-head">
+                          <strong>{exp.title || exp.role}</strong>
+                          {exp.company && <span className="text-muted">· {exp.company}</span>}
+                        </div>
+                        <div className="comparison-side-grid" style={{ marginTop: "var(--space-2)" }}>
+                          <div className="comparison-side original">
+                            <span className="comparison-side-label">Original</span>
+                            <p className="comparison-text">
+                              {origExp?.description || "Original experience bullet"}
+                            </p>
+                          </div>
+                          <div className="comparison-side tailored">
+                            <span className="comparison-side-label">Tailored</span>
+                            <p className="comparison-text">{exp.description}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+    </div>
   );
 }

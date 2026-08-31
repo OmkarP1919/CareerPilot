@@ -1,60 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../services/api";
-import StatusBadge from "../components/StatusBadge";
+import { useTranslation } from "../context/LanguageContext";
 import EmptyState from "../components/EmptyState";
 import { SkeletonCard } from "../components/Skeleton";
+import Modal from "../components/Modal";
 import {
-  Plus,
-  X,
-  Briefcase,
-  Edit3,
-  Trash2,
-  Calendar,
-  FileText,
-  Building2,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
   Layers,
+  Plus,
+  Trash2,
+  ArrowRight,
 } from "lucide-react";
 
-const STATUSES = [
-  "saved",
-  "preparing",
-  "applied",
-  "assessment",
-  "interview",
-  "offer",
-  "rejected",
-  "withdrawn",
-];
-
-const EMPTY_FORM = {
-  job_id: "",
-  status: "saved",
-  application_date: new Date().toISOString().split("T")[0],
-  resume_version: "",
-  notes: "",
-};
+const PIPELINE_STAGES = ["Saved", "Applied", "Interview", "Offer"];
 
 export default function ApplicationsPage() {
+  const { t } = useTranslation();
   const [applications, setApplications] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [showModal, setShowModal] = useState(false);
-  const [editApp, setEditApp] = useState(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  // Detail / Edit modal
+  const [selectedApp, setSelectedApp] = useState(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
   const [notification, setNotification] = useState(null);
 
-  const showNotif = (msg, type = "success") => {
+  const notify = (msg, type = "success") => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3500);
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [apps, jobsData] = await Promise.all([
         api.get("/applications/"),
@@ -63,366 +41,369 @@ export default function ApplicationsPage() {
       setApplications(Array.isArray(apps) ? apps : []);
       setJobs(Array.isArray(jobsData) ? jobsData : []);
     } catch {
-      showNotif("Failed to load application pipeline.", "error");
+      notify("Failed to load applications.", "error");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  const openAdd = () => {
-    setEditApp(null);
-    setForm(EMPTY_FORM);
-    setShowModal(true);
+  const getJobForApp = (app) => {
+    return jobs.find((j) => j.id === app.job_id) || {
+      title: app.job_title || "Target Role",
+      company: app.company_name || "Company",
+      location: "",
+    };
   };
 
-  const openEdit = (app) => {
-    setEditApp(app);
-    setForm({
-      job_id: app.job_id,
-      status: app.status,
-      application_date: app.application_date?.split("T")[0] || "",
-      resume_version: app.resume_version || "",
-      notes: app.notes || "",
-    });
-    setShowModal(true);
-  };
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setSaving(true);
+  const handleUpdateStatus = async (appId, newStatus) => {
     try {
-      if (editApp) {
-        await api.put(`/applications/${editApp.id}`, form);
-        showNotif("Application status updated.");
-      } else {
-        if (!form.job_id) {
-          showNotif("Please select a target job opportunity.", "error");
-          setSaving(false);
-          return;
-        }
-        await api.post("/applications/", form);
-        showNotif("Job added to application pipeline.");
-      }
-      setShowModal(false);
-      await fetchData();
-    } catch {
-      showNotif("Failed to save application.", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleQuickStatusChange = async (appId, newStatus) => {
-    try {
-      await api.put(`/applications/${appId}`, { status: newStatus });
+      const updated = await api.put(`/applications/${appId}`, { status: newStatus });
       setApplications((prev) =>
         prev.map((a) => (a.id === appId ? { ...a, status: newStatus } : a))
       );
-      showNotif(`Status moved to ${newStatus}`);
+      if (selectedApp?.id === appId) {
+        setSelectedApp((prev) => ({ ...prev, status: newStatus }));
+      }
+      notify(`Status updated to ${newStatus}`);
     } catch {
-      showNotif("Failed to update status", "error");
+      notify("Failed to update status.", "error");
     }
   };
 
-  const handleDelete = async (appId) => {
+  const handleSaveNotes = async () => {
+    if (!selectedApp) return;
+    setSavingNotes(true);
+    try {
+      await api.put(`/applications/${selectedApp.id}`, { notes: editNotes });
+      setApplications((prev) =>
+        prev.map((a) => (a.id === selectedApp.id ? { ...a, notes: editNotes } : a))
+      );
+      setSelectedApp((prev) => ({ ...prev, notes: editNotes }));
+      notify("Notes updated successfully.");
+    } catch {
+      notify("Failed to save notes.", "error");
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handleDeleteApp = async (appId) => {
     if (!window.confirm("Remove this application from your pipeline?")) return;
     try {
       await api.delete(`/applications/${appId}`);
-      showNotif("Application removed.");
-      await fetchData();
+      setApplications((prev) => prev.filter((a) => a.id !== appId));
+      if (selectedApp?.id === appId) setSelectedApp(null);
+      notify("Application removed from pipeline.");
     } catch {
-      showNotif("Failed to delete application.", "error");
+      notify("Failed to delete application.", "error");
     }
   };
 
-  const statusCounts = STATUSES.reduce((acc, s) => {
-    acc[s] = applications.filter((a) => a.status === s).length;
-    return acc;
-  }, {});
+  // Pipeline counts
+  const savedCount = applications.filter((a) => a.status?.toLowerCase() === "saved").length;
+  const appliedCount = applications.filter((a) => a.status?.toLowerCase() === "applied").length;
+  const interviewCount = applications.filter((a) => a.status?.toLowerCase() === "interview").length;
+  const offerCount = applications.filter((a) => a.status?.toLowerCase() === "offer").length;
+  const rejectedCount = applications.filter((a) => a.status?.toLowerCase() === "rejected").length;
 
-  const filtered = statusFilter
-    ? applications.filter((a) => a.status === statusFilter)
-    : applications;
-
-  if (loading) {
-    return (
-      <div className="page">
-        <div className="page-header">
-          <div className="skeleton skeleton-title" style={{ width: 220, height: 32 }} />
-        </div>
-        <div className="grid-2">
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-      </div>
-    );
-  }
+  const filteredApps = applications.filter((app) => {
+    if (statusFilter === "all") return true;
+    return app.status?.toLowerCase() === statusFilter.toLowerCase();
+  });
 
   return (
-    <div className="page">
-      {/* === Page Header === */}
+    <div className="page applications-page">
+      {/* Toast Notification */}
+      {notification && (
+        <div className={`toast toast-${notification.type}`} role="status">
+          {notification.msg}
+        </div>
+      )}
+
+      {/* Page Header */}
       <header className="page-header">
         <div className="page-header-row">
           <div>
-            <h1>Application Pipeline</h1>
-            <p>Track your submission stages, interview rounds, and offers</p>
+            <h1>{t("app.title", "Applications")}</h1>
+            <p>{applications.length} {t("app.activeCount", "active applications in your career pipeline")}</p>
           </div>
+
           <div className="page-header-actions">
-            <button className="btn btn-primary btn-sm" onClick={openAdd}>
-              <Plus size={14} />
-              <span>Track Application</span>
-            </button>
+            <Link to="/discover" className="btn btn-primary">
+              <Plus size={16} />
+              <span>Explore Opportunities to Apply</span>
+            </Link>
           </div>
         </div>
       </header>
 
-      {notification && (
-        <div className={`alert alert-${notification.type}`} role="alert">
-          {notification.type === "error" ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
-          <span>{notification.msg}</span>
-        </div>
-      )}
-
-      {/* === Filter Pills Bar === */}
-      <div className="pipeline-filter-bar">
-        <button
-          className={`pipeline-filter-pill ${!statusFilter ? "active" : ""}`}
-          onClick={() => setStatusFilter("")}
-          type="button"
-        >
-          <span>All Stages</span>
-          <span className="pipeline-pill-count">{applications.length}</span>
-        </button>
-
-        {STATUSES.map((s) => (
+      {/* Visual Status Pipeline Strip */}
+      <section className="card pipeline-strip-card">
+        <div className="pipeline-stages-row">
           <button
-            key={s}
-            className={`pipeline-filter-pill ${statusFilter === s ? "active" : ""}`}
-            onClick={() => setStatusFilter(statusFilter === s ? "" : s)}
             type="button"
+            className={`pipeline-stage-box ${statusFilter === "saved" ? "active" : ""}`}
+            onClick={() => setStatusFilter(statusFilter === "saved" ? "all" : "saved")}
           >
-            <span>{s.charAt(0).toUpperCase() + s.slice(1)}</span>
-            <span className="pipeline-pill-count">{statusCounts[s] || 0}</span>
+            <span className="stage-num font-mono">{savedCount}</span>
+            <span className="stage-name">{t("app.saved", "Saved")}</span>
           </button>
-        ))}
-      </div>
 
-      {/* === Applications Grid / List === */}
-      {filtered.length > 0 ? (
-        <div className="pipeline-cards-list">
-          {filtered.map((app) => (
-            <div key={app.id} className="pipeline-card">
-              <div className="pipeline-card-main">
-                <div className="pipeline-card-header">
-                  <div>
-                    <span className="pipeline-company-tag">
-                      <Building2 size={13} />
-                      <span>{app.job_company || "Target Company"}</span>
-                    </span>
-                    <Link to={`/discover/${app.job_id}`} className="pipeline-job-title">
-                      {app.job_title || "Unknown Job"}
-                    </Link>
-                  </div>
-                  <div className="pipeline-status-dropdown-wrap">
-                    <StatusBadge status={app.status} />
-                  </div>
-                </div>
+          <div className="stage-arrow">→</div>
 
-                <div className="pipeline-meta-chips">
-                  {app.application_date && (
-                    <span className="pipeline-meta-item">
-                      <Calendar size={13} />
-                      <span>Applied {new Date(app.application_date).toLocaleDateString()}</span>
-                    </span>
-                  )}
-                  {app.resume_version && (
-                    <span className="pipeline-meta-item">
-                      <FileText size={13} />
-                      <span>Resume: {app.resume_version}</span>
-                    </span>
-                  )}
-                </div>
+          <button
+            type="button"
+            className={`pipeline-stage-box ${statusFilter === "applied" ? "active" : ""}`}
+            onClick={() => setStatusFilter(statusFilter === "applied" ? "all" : "applied")}
+          >
+            <span className="stage-num font-mono">{appliedCount}</span>
+            <span className="stage-name">{t("app.applied", "Applied")}</span>
+          </button>
 
-                {app.notes && (
-                  <div className="pipeline-notes-box">
-                    <p>{app.notes}</p>
-                  </div>
-                )}
-              </div>
+          <div className="stage-arrow">→</div>
 
-              <div className="pipeline-card-actions">
-                <div className="stage-quick-select-wrap">
-                  <select
-                    className="form-select form-select-sm"
-                    value={app.status}
-                    onChange={(e) => handleQuickStatusChange(app.id, e.target.value)}
-                    aria-label="Update application stage"
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        Move to: {s.charAt(0).toUpperCase() + s.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          <button
+            type="button"
+            className={`pipeline-stage-box ${statusFilter === "interview" ? "active" : ""}`}
+            onClick={() => setStatusFilter(statusFilter === "interview" ? "all" : "interview")}
+          >
+            <span className="stage-num font-mono">{interviewCount}</span>
+            <span className="stage-name">{t("app.interview", "Interview")}</span>
+          </button>
 
-                <div className="pipeline-action-btns">
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => openEdit(app)}
-                    type="button"
-                  >
-                    <Edit3 size={14} />
-                    <span>Edit</span>
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-sm btn-danger"
-                    onClick={() => handleDelete(app.id)}
-                    type="button"
-                    title="Delete Application"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            </div>
+          <div className="stage-arrow">→</div>
+
+          <button
+            type="button"
+            className={`pipeline-stage-box offer ${statusFilter === "offer" ? "active" : ""}`}
+            onClick={() => setStatusFilter(statusFilter === "offer" ? "all" : "offer")}
+          >
+            <span className="stage-num font-mono text-success">{offerCount}</span>
+            <span className="stage-name">{t("app.offer", "Offer")}</span>
+          </button>
+
+          {rejectedCount > 0 && (
+            <>
+              <div className="stage-arrow">|</div>
+              <button
+                type="button"
+                className={`pipeline-stage-box rejected ${statusFilter === "rejected" ? "active" : ""}`}
+                onClick={() => setStatusFilter(statusFilter === "rejected" ? "all" : "rejected")}
+              >
+                <span className="stage-num font-mono text-muted">{rejectedCount}</span>
+                <span className="stage-name">{t("app.rejected", "Rejected")}</span>
+              </button>
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Filter Tabs */}
+      <div className="apps-filter-bar">
+        <div className="tabs-pill" role="tablist">
+          {["all", "saved", "applied", "interview", "offer", "rejected"].map((st) => (
+            <button
+              key={st}
+              type="button"
+              className={`tab-pill-item ${statusFilter === st ? "active" : ""}`}
+              onClick={() => setStatusFilter(st)}
+              role="tab"
+              aria-selected={statusFilter === st}
+            >
+              <span style={{ textTransform: "capitalize" }}>{st === "all" ? "All Applications" : st}</span>
+            </button>
           ))}
         </div>
-      ) : (
+      </div>
+
+      {/* Applications List */}
+      {loading ? (
+        <div className="stack" style={{ gap: "var(--space-4)" }}>
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      ) : filteredApps.length === 0 ? (
         <EmptyState
           icon={Layers}
-          title={statusFilter ? `No ${statusFilter} applications` : "No applications in pipeline"}
-          text={
-            statusFilter
-              ? `You do not have any applications in the '${statusFilter}' stage.`
-              : "Track your first application submission to monitor your interview progress."
+          title={t("app.noApps", "No applications yet")}
+          description={
+            statusFilter !== "all"
+              ? `No applications found with status "${statusFilter}".`
+              : t("app.noAppsDesc", "Once you apply to a job, you can track its progress and milestones here.")
           }
           action={
-            <button className="btn btn-primary btn-sm" onClick={openAdd}>
-              <Plus size={14} /> Track Application
-            </button>
+            <Link to="/discover" className="btn btn-primary">
+              <span>Find Jobs</span>
+              <ArrowRight size={16} />
+            </Link>
           }
         />
+      ) : (
+        <div className="applications-list-stack">
+          {filteredApps.map((app) => {
+            const job = getJobForApp(app);
+            const appliedDate = app.application_date || app.created_at;
+
+            return (
+              <div key={app.id} className="card application-item-card">
+                <div className="app-item-main">
+                  <div className="app-item-header">
+                    <div>
+                      <h3 className="app-item-title">
+                        <Link to={`/discover/${app.job_id}`}>{job.title}</Link>
+                      </h3>
+                      <p className="app-item-company">
+                        {job.company}
+                        {job.location && ` • ${job.location}`}
+                      </p>
+                    </div>
+
+                    <div className="app-status-select-wrap">
+                      <select
+                        className="status-select-sm"
+                        value={app.status || "Saved"}
+                        onChange={(e) => handleUpdateStatus(app.id, e.target.value)}
+                        aria-label="Change application status"
+                      >
+                        <option value="Saved">Saved</option>
+                        <option value="Applied">Applied</option>
+                        <option value="Interview">Interview</option>
+                        <option value="Offer">Offer</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="app-item-meta">
+                    <span className="text-xs text-muted">
+                      {appliedDate ? `Applied ${new Date(appliedDate).toLocaleDateString()}` : "Saved recently"}
+                    </span>
+                    {app.notes && (
+                      <span className="app-notes-preview text-xs text-secondary">
+                        Note: {app.notes.slice(0, 60)}{app.notes.length > 60 ? "..." : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="app-item-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setSelectedApp(app);
+                      setEditNotes(app.notes || "");
+                    }}
+                  >
+                    <span>{t("app.viewApp", "View Application")}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-icon btn-sm text-danger"
+                    onClick={() => handleDeleteApp(app.id)}
+                    title="Remove from pipeline"
+                    aria-label="Remove application"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      {/* === Add / Edit Application Modal === */}
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{editApp ? "Edit Application Stage" : "Track New Application"}</h3>
-              <button
-                className="btn btn-ghost btn-icon btn-sm"
-                onClick={() => setShowModal(false)}
-                aria-label="Close"
+      {/* Application Detail Modal */}
+      {selectedApp && (
+        <Modal
+          isOpen={Boolean(selectedApp)}
+          onClose={() => setSelectedApp(null)}
+          title={`Application: ${getJobForApp(selectedApp).title}`}
+        >
+          <div className="app-detail-modal-body">
+            <div className="app-detail-company-box">
+              <h3>{getJobForApp(selectedApp).title}</h3>
+              <p className="text-secondary">{getJobForApp(selectedApp).company}</p>
+            </div>
+
+            {/* Stage Timeline */}
+            <div className="app-timeline-section">
+              <span className="timeline-title">Stage Progression</span>
+              <div className="app-timeline-steps">
+                {PIPELINE_STAGES.map((st, idx) => {
+                  const currentIdx = PIPELINE_STAGES.indexOf(
+                    selectedApp.status ? selectedApp.status.charAt(0).toUpperCase() + selectedApp.status.slice(1).toLowerCase() : "Saved"
+                  );
+                  const isDone = idx <= currentIdx;
+                  const isCurrent = idx === currentIdx;
+
+                  return (
+                    <div key={st} className={`timeline-node ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`}>
+                      <div className="node-circle font-mono">{idx + 1}</div>
+                      <span className="node-label">{st}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Quick Status Update */}
+            <div className="form-group" style={{ marginTop: "var(--space-4)" }}>
+              <label className="form-label">Current Pipeline Status</label>
+              <select
+                className="form-select"
+                value={selectedApp.status || "Saved"}
+                onChange={(e) => handleUpdateStatus(selectedApp.id, e.target.value)}
               >
-                <X size={18} />
+                <option value="Saved">Saved</option>
+                <option value="Applied">Applied</option>
+                <option value="Interview">Interview</option>
+                <option value="Offer">Offer</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+            </div>
+
+            {/* Application Notes */}
+            <div className="form-group" style={{ marginTop: "var(--space-4)" }}>
+              <label className="form-label">Application Notes & Follow-up Milestones</label>
+              <textarea
+                className="form-textarea"
+                rows={3}
+                placeholder="e.g. Interview scheduled with Engineering Manager on Friday..."
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ marginTop: "var(--space-2)" }}
+                onClick={handleSaveNotes}
+                disabled={savingNotes}
+              >
+                {savingNotes ? "Saving..." : "Save Notes"}
               </button>
             </div>
-            <form onSubmit={handleSave} className="modal-body">
-              {!editApp && (
-                <div className="form-group">
-                  <label className="form-label" htmlFor="app-job-id">Opportunity *</label>
-                  <select
-                    id="app-job-id"
-                    className="form-select"
-                    value={form.job_id}
-                    onChange={(e) => setForm({ ...form, job_id: e.target.value })}
-                    required
-                  >
-                    <option value="">Select an opportunity...</option>
-                    {jobs.map((j) => (
-                      <option key={j.id} value={j.id}>
-                        {j.title} — {j.company}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Current Stage</label>
-                  <select
-                    className="form-select"
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s.charAt(0).toUpperCase() + s.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="app-date">Application Date</label>
-                  <input
-                    id="app-date"
-                    className="form-input"
-                    type="date"
-                    value={form.application_date}
-                    onChange={(e) => setForm({ ...form, application_date: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="app-resume-version">Resume Version Used</label>
-                <input
-                  id="app-resume-version"
-                  className="form-input"
-                  value={form.resume_version}
-                  onChange={(e) => setForm({ ...form, resume_version: e.target.value })}
-                  placeholder="e.g. Software_Architect_v3.pdf"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="app-notes">Interview Notes & Next Steps</label>
-                <textarea
-                  id="app-notes"
-                  className="form-textarea"
-                  rows={3}
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  placeholder="Recruiter contact, interview rounds, prep questions..."
-                />
-              </div>
-
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <>
-                      <span className="spinner-inline" />
-                      <span>Saving...</span>
-                    </>
-                  ) : editApp ? (
-                    "Save Changes"
-                  ) : (
-                    "Track Opportunity"
-                  )}
-                </button>
-              </div>
-            </form>
+            <div className="modal-footer" style={{ marginTop: "var(--space-6)" }}>
+              <Link to={`/discover/${selectedApp.job_id}`} className="btn btn-secondary btn-sm">
+                <span>View Job Details</span>
+                <ArrowRight size={14} />
+              </Link>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setSelectedApp(null)}
+              >
+                Done
+              </button>
+            </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

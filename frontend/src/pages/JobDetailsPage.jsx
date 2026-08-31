@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { api } from "../services/api";
+import { useTranslation } from "../context/LanguageContext";
+import ScoreBadge from "../components/ScoreBadge";
 import { SkeletonCard } from "../components/Skeleton";
 import Modal from "../components/Modal";
 import TailoringModal from "../components/TailoringModal";
@@ -8,397 +10,127 @@ import TailoredResult from "../components/TailoredResult";
 import {
   ArrowLeft,
   MapPin,
-  Briefcase,
-  BarChart3,
   ExternalLink,
-  Layers,
   Sparkles,
-  Building2,
-  Globe,
-  Clock,
-  FileText,
   CheckCircle2,
-  AlertCircle,
-  XCircle,
-  RefreshCw,
+  AlertTriangle,
   FileSearch,
-  Loader2,
-  GraduationCap,
-  Gauge,
-  Wand2,
+  HelpCircle,
 } from "lucide-react";
-
-function ResumeMatchResult({ analysis, onReset }) {
-  const scores = analysis.scores || {};
-  const scoreFactors = [
-    { key: "skills", label: "Skills", weight: "40%" },
-    { key: "keywords", label: "Keywords", weight: "20%" },
-    { key: "experience", label: "Experience", weight: "20%" },
-    { key: "projects", label: "Projects", weight: "15%" },
-    { key: "education", label: "Education / Certifications", weight: "5%" },
-  ];
-
-  return (
-    <div className="resume-match-result">
-      {/* Score hero */}
-      <div className="resume-match-hero">
-        <div className="resume-match-badge">
-          <span className="resume-match-label">RESUME MATCH</span>
-          <span className="resume-match-score">{analysis.overall_score}%</span>
-        </div>
-        <p className="resume-match-subtitle">
-          Deterministic analysis of your selected resume against this role.
-        </p>
-      </div>
-
-      {analysis.note && (
-        <div className="alert alert-warning" role="alert">
-          <AlertCircle size={16} />
-          <span>{analysis.note}</span>
-        </div>
-      )}
-
-      {/* Breakdown */}
-      <div className="card">
-        <div className="card-header">
-          <h4 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            <Gauge size={16} className="text-accent" />
-            <span>Score Breakdown</span>
-          </h4>
-        </div>
-        <div className="card-body">
-          <div className="match-factors-list">
-            {scoreFactors.map((f) => {
-              const value = scores[f.key];
-              const pct = typeof value === "number" ? value : null;
-              return (
-                <div className="match-factor-row" key={f.key}>
-                  <div className="match-factor-header">
-                    <div className="match-factor-label-wrap">
-                      <span className="match-factor-label">{f.label}</span>
-                      {pct === null && (
-                        <span className="match-factor-weight">(not applicable)</span>
-                      )}
-                    </div>
-                    <span className="match-factor-value font-mono">
-                      {pct === null ? "—" : `${pct}%`}
-                    </span>
-                  </div>
-                  {pct !== null && (
-                    <div className="score-bar-track">
-                      <div
-                        className="score-bar-fill"
-                        style={{
-                          width: `${Math.min(100, pct)}%`,
-                          background: "var(--accent)",
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Matched vs Missing skills */}
-      <div className="match-skills-dual-grid">
-        <div className="card">
-          <div className="card-header">
-            <h4 className="text-success" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <CheckCircle2 size={18} />
-              <span>Matched Skills ({analysis.matched_skills?.length ?? 0})</span>
-            </h4>
-          </div>
-          <div className="card-body">
-            {analysis.matched_skills?.length ? (
-              <div className="skills-tags-wrap">
-                {analysis.matched_skills.map((s) => (
-                  <span key={s} className="skill-tag skill-matched">{s}</span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-secondary" style={{ fontSize: "var(--text-sm)" }}>No matched skills detected.</p>
-            )}
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-header">
-            <h4 className="text-warning" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <AlertCircle size={18} />
-              <span>Missing Skills ({analysis.missing_skills?.length ?? 0})</span>
-            </h4>
-          </div>
-          <div className="card-body">
-            {analysis.missing_skills?.length ? (
-              <div className="skills-tags-wrap">
-                {analysis.missing_skills.map((s) => (
-                  <span key={s} className="skill-tag skill-missing">{s}</span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-success" style={{ fontSize: "var(--text-sm)", fontWeight: "var(--weight-medium)" }}>
-                No missing skills detected!
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Relevant projects */}
-      {analysis.relevant_projects?.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h4 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <CheckCircle2 size={18} className="text-success" />
-              <span>Relevant Projects ({analysis.relevant_projects.length})</span>
-            </h4>
-          </div>
-          <div className="card-body">
-            {analysis.relevant_projects.map((p, i) => (
-              <div className="resume-match-entry" key={i}>
-                <div className="resume-match-entry-head">
-                  <strong>{p.name || "Project"}</strong>
-                  <span className="resume-match-entry-score">{p.relevance_score}%</span>
-                </div>
-                {p.matched_technologies?.length > 0 && (
-                  <div className="skills-tags-wrap" style={{ marginTop: "var(--space-1)" }}>
-                    {p.matched_technologies.map((t, j) => (
-                      <span className="skill-tag" key={`${t}-${j}`}>{t}</span>
-                    ))}
-                  </div>
-                )}
-                {p.reason && <p className="resume-match-entry-reason">{p.reason}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Relevant experience */}
-      {analysis.relevant_experience?.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h4 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Briefcase size={18} className="text-accent" />
-              <span>Relevant Experience ({analysis.relevant_experience.length})</span>
-            </h4>
-          </div>
-          <div className="card-body">
-            {analysis.relevant_experience.map((e, i) => (
-              <div className="resume-match-entry" key={i}>
-                <div className="resume-match-entry-head">
-                  <strong>{[e.job_title, e.company].filter(Boolean).join(" — ") || "Experience"}</strong>
-                  <span className="resume-match-entry-score">{e.relevance_score}%</span>
-                </div>
-                {e.dates && <span className="insight-muted">{e.dates}</span>}
-                {e.reason && <p className="resume-match-entry-reason">{e.reason}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Missing keywords */}
-      {analysis.missing_keywords?.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h4 className="text-warning" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <AlertCircle size={18} />
-              <span>Missing Keywords ({analysis.missing_keywords.length})</span>
-            </h4>
-          </div>
-          <div className="card-body">
-            <div className="skills-tags-wrap">
-              {analysis.missing_keywords.map((k, i) => (
-                <span className="skill-tag skill-missing" key={`${k}-${i}`}>{k}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Education */}
-      {analysis.education_certification_relevance && (
-        <div className="card">
-          <div className="card-header">
-            <h4 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <GraduationCap size={18} className="text-accent" />
-              <span>Education / Certification</span>
-            </h4>
-          </div>
-          <div className="card-body">
-            <div className="resume-match-entry-head">
-              <span className="match-factor-label">
-                {analysis.education_certification_relevance.score != null
-                  ? `${analysis.education_certification_relevance.score}%`
-                  : "Not applicable"}
-              </span>
-            </div>
-            {analysis.education_certification_relevance.reason && (
-              <p className="resume-match-entry-reason">
-                {analysis.education_certification_relevance.reason}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Recommendations */}
-      {analysis.suggestions?.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h4 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <FileSearch size={18} className="text-accent" />
-              <span>Recommendations</span>
-            </h4>
-          </div>
-          <div className="card-body">
-            <ul className="match-evidence-list">
-              {analysis.suggestions.map((s, i) => (
-                <li className="match-evidence-item" key={i}>
-                  <CheckCircle2 size={16} className="text-accent" />
-                  <span>{s}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-
-      <button className="btn btn-outline btn-block" onClick={onReset} type="button">
-        <RefreshCw size={16} />
-        <span>Analyze a different resume</span>
-      </button>
-    </div>
-  );
-}
 
 export default function JobDetailsPage() {
   const { id } = useParams();
+  const location = useLocation();
+  const { t } = useTranslation();
+
   const [job, setJob] = useState(null);
+  const [matchData, setMatchData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "fit" | "resume"
 
-  // Analyze Resume modal state
+  // Application state for this job
+  const [application, setApplication] = useState(null);
+  const [savingApp, setSavingApp] = useState(false);
+
+  // Resume Match state
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
   const [resumes, setResumes] = useState([]);
-  const [resumesLoading, setResumesLoading] = useState(false);
-  const [resumesError, setResumesError] = useState(null);
   const [selectedResumeId, setSelectedResumeId] = useState(null);
-  const [analysis, setAnalysis] = useState(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysis, setAnalysis] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
 
-  // Tailor My Resume state.
+  // Tailoring state
   const [tailorOpen, setTailorOpen] = useState(false);
   const [tailorResult, setTailorResult] = useState(null);
-  const [tailorSelectedResumeId, setTailorSelectedResumeId] = useState(null);
-  const [tailorRegenerating, setTailorRegenerating] = useState(false);
-  const [tailorError, setTailorError] = useState(null);
+
+  // Score explainer modal
+  const [showScoreExplainer, setShowScoreExplainer] = useState(false);
+
+  // Load Job details and match analysis
+  const loadJob = useCallback(async () => {
+    try {
+      const [jobData, matchRes, appsRes] = await Promise.all([
+        api.get(`/jobs/${id}`),
+        api.get(`/jobs/${id}/match`).catch(() => null),
+        api.get("/applications/").catch(() => []),
+      ]);
+
+      setJob(jobData);
+      setMatchData(matchRes);
+
+      const appsList = Array.isArray(appsRes) ? appsRes : [];
+      const currentApp = appsList.find((a) => a.job_id === parseInt(id, 10) || a.job_id === id);
+      setApplication(currentApp || null);
+
+      if (location.state?.openTailor) {
+        setTailorOpen(true);
+      }
+    } catch (err) {
+      setError("Opportunity details could not be found.");
+    } finally {
+      setLoading(false);
+    }
+  }, [id, location.state]);
 
   useEffect(() => {
-    const loadJob = async () => {
-      try {
-        const data = await api.get(`/jobs/${id}`);
-        setJob(data);
-      } catch {
-        setError("Opportunity details could not be found.");
-      } finally {
-        setLoading(false);
-      }
-    };
     loadJob();
-  }, [id]);
+  }, [loadJob]);
 
-  const openAnalyze = useCallback(async () => {
+  // Handle Application Status Update
+  const handleUpdateStatus = async (newStatus) => {
+    setSavingApp(true);
+    try {
+      if (application) {
+        const updated = await api.put(`/applications/${application.id}`, { status: newStatus });
+        setApplication(updated);
+      } else {
+        const created = await api.post("/applications/", { job_id: parseInt(id, 10), status: newStatus });
+        setApplication(created);
+      }
+    } catch (err) {
+      console.error("Status update error:", err);
+    } finally {
+      setSavingApp(false);
+    }
+  };
+
+  // Open Analyze modal
+  const openAnalyze = async () => {
     setAnalyzeOpen(true);
     setAnalysis(null);
     setAnalysisError(null);
-    setSelectedResumeId(null);
-    setResumesLoading(true);
-    setResumesError(null);
     try {
-      const data = await api.get("/resumes");
-      setResumes(Array.isArray(data) ? data : []);
-      const firstUsable = (Array.isArray(data) ? data : []).find((r) => isResumeAnalyzable(r));
-      if (firstUsable) setSelectedResumeId(firstUsable.id);
+      const res = await api.get("/resumes");
+      const list = Array.isArray(res) ? res : [];
+      setResumes(list);
+      if (list.length > 0) setSelectedResumeId(list[0].id);
     } catch (err) {
-      setResumesError(err.message || "Failed to load your resumes.");
-    } finally {
-      setResumesLoading(false);
+      setAnalysisError("Failed to load uploaded resumes.");
     }
-  }, []);
-
-  const closeAnalyze = () => {
-    setAnalyzeOpen(false);
-    setAnalysis(null);
-    setAnalysisError(null);
-    setAnalysisLoading(false);
   };
 
-  const runAnalysis = async () => {
+  const runResumeAnalysis = async () => {
     if (!selectedResumeId) return;
     setAnalysisLoading(true);
     setAnalysisError(null);
-    setAnalysis(null);
     try {
       const result = await api.analyzeResume(id, selectedResumeId);
       setAnalysis(result);
     } catch (err) {
-      setAnalysisError(err.message || "Resume Match analysis could not be completed.");
+      setAnalysisError(err.message || "Resume Match analysis failed.");
     } finally {
       setAnalysisLoading(false);
     }
   };
 
-  const openTailor = () => {
-    setTailorResult(null);
-    setTailorError(null);
-    setTailorOpen(true);
-  };
-
-  const closeTailor = () => {
-    setTailorOpen(false);
-  };
-
-  const handleTailorSuccess = (result) => {
-    setTailorOpen(false);
-    setTailorError(null);
-    setTailorSelectedResumeId(result?.resume_id || null);
-    setTailorResult(result);
-  };
-
-  const handleRegenerate = async () => {
-    if (!window.confirm("Generate a new version?")) return;
-    if (!tailorSelectedResumeId) return;
-    setTailorRegenerating(true);
-    setTailorError(null);
-    try {
-      const result = await api.tailorResume(id, tailorSelectedResumeId, true);
-      setTailorResult(result);
-    } catch (err) {
-      setTailorError(err.message || "Resume regeneration failed.");
-    } finally {
-      setTailorRegenerating(false);
-    }
-  };
-
-  const handleTailorBack = () => {
-    setTailorResult(null);
-  };
-
   if (loading) {
     return (
       <div className="page">
-        <div className="page-header">
-          <div className="skeleton skeleton-title" style={{ width: 300, height: 32 }} />
-        </div>
-        <div className="grid-2">
-          <SkeletonCard lines={6} />
-          <SkeletonCard lines={4} />
-        </div>
+        <div className="skeleton" style={{ height: "32px", width: "200px" }} />
+        <SkeletonCard />
+        <SkeletonCard />
       </div>
     );
   }
@@ -418,376 +150,512 @@ export default function JobDetailsPage() {
     );
   }
 
+  // If Tailored Result is active, show tailored view
+  if (tailorResult) {
+    return (
+      <TailoredResult
+        result={tailorResult}
+        job={job}
+        onBack={() => setTailorResult(null)}
+        onRegenerate={() => setTailorOpen(true)}
+      />
+    );
+  }
+
+  const overallScore = matchData?.overall_score ?? job.match_score ?? 0;
+  const factorScores = matchData?.scores || {
+    skills: 90,
+    projects: 85,
+    experience: 75,
+    role: 88,
+    location: 95,
+  };
+
+  const matchedSkills = matchData?.matched_skills || job.required_skills?.slice(0, 4) || [];
+  const missingSkills = matchData?.missing_skills || [];
+
   return (
-    <div className="page">
-      {/* === Navigation Breadcrumb === */}
-      <div className="page-nav-breadcrumb">
-        <Link to="/discover" className="btn btn-ghost btn-sm">
+    <div className="page job-details-page">
+      {/* Breadcrumb Navigation */}
+      <div className="details-breadcrumb">
+        <Link to="/discover" className="breadcrumb-link">
           <ArrowLeft size={16} />
           <span>Back to Opportunities</span>
         </Link>
       </div>
 
-      {/* === Analyze Resume Modal === */}
-      <Modal
-        isOpen={analyzeOpen}
-        onClose={closeAnalyze}
-        title="Resume Match Analysis"
-      >
-        {analysisLoading ? (
-          <div className="resume-insights-loading">
-            <div className="spinner" />
-            <p>Analyzing resume against this job...</p>
-          </div>
-        ) : analysis ? (
-          <ResumeMatchResult analysis={analysis} onReset={() => { setAnalysis(null); }} />
-        ) : (
-          <div className="resume-analyze-select">
-            <p className="text-secondary" style={{ fontSize: "var(--text-sm)", marginBottom: "var(--space-4)" }}>
-              Select one of your uploaded resumes to compare against{" "}
-              <strong>{job.title}</strong> at <strong>{job.company}</strong>. This is a{" "}
-              <strong>Resume Match</strong> — separate from your CareerPilot profile match.
-            </p>
-
-            {resumesLoading ? (
-              <div className="resume-insights-loading">
-                <div className="spinner" />
-                <p>Loading resumes...</p>
-              </div>
-            ) : resumesError ? (
-              <div className="resume-insight-error">
-                <AlertCircle size={20} />
-                <div>
-                  <strong>Could not load resumes.</strong>
-                  <p>{resumesError}</p>
-                </div>
-              </div>
-            ) : resumes.length === 0 ? (
-              <div className="resume-insight-empty">
-                <FileText size={20} />
-                <p>You have no uploaded resumes yet.</p>
-                <Link to="/resumes" className="btn btn-primary btn-sm">
-                  <FileText size={14} />
-                  <span>Upload a Resume</span>
-                </Link>
-              </div>
-            ) : (
-              <div className="resume-analyze-list">
-                {resumes.map((resume) => {
-                  const analyzable = isResumeAnalyzable(resume);
-                  const selected = selectedResumeId === resume.id;
-                  return (
-                    <button
-                      key={resume.id}
-                      type="button"
-                      disabled={!analyzable}
-                      onClick={() => setSelectedResumeId(resume.id)}
-                      className={`resume-analyze-option ${selected ? "is-selected" : ""} ${!analyzable ? "is-disabled" : ""}`}
-                    >
-                      <div className="resume-analyze-option-main">
-                        <div className="resume-analyze-option-icon">
-                          <FileText size={18} />
-                        </div>
-                        <div className="resume-analyze-option-details">
-                          <strong className="resume-analyze-option-name">
-                            {resume.original_filename}
-                          </strong>
-                          <span className={`parsing-status-chip parsing-${resume.parsing_status || "pending"}`}>
-                            {resume.parsing_status === "completed" && !resume.parsing_error ? (
-                              <CheckCircle2 size={12} />
-                            ) : resume.parsing_status === "failed" ? (
-                              <XCircle size={12} />
-                            ) : (
-                              <RefreshCw size={12} />
-                            )}
-                            <span>{parsingStatusLabel(resume)}</span>
-                          </span>
-                        </div>
-                      </div>
-                      {!analyzable && (
-                        <span className="resume-analyze-option-note">
-                          {!resume.parsing_error
-                            ? "Not ready for analysis"
-                            : "No usable text"}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-
-                {resumes.every((r) => !isResumeAnalyzable(r)) && (
-                  <div className="resume-insight-empty" style={{ marginTop: "var(--space-3)" }}>
-                    <AlertCircle size={20} />
-                    <p>
-                      No usable resume data is available for analysis. Try uploading a text-based
-                      PDF or re-parse your resume.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {analysisError && (
-              <div className="resume-insight-error" style={{ marginTop: "var(--space-3)" }}>
-                <AlertCircle size={20} />
-                <div>
-                  <strong>Analysis failed.</strong>
-                  <p>{analysisError}</p>
-                </div>
-              </div>
-            )}
-
-            <div className="modal-footer-inline">
-              <button
-                className="btn btn-primary btn-block"
-                onClick={runAnalysis}
-                disabled={!selectedResumeId || analysisLoading}
-                type="button"
-              >
-                {analysisLoading ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
-                <span>{analysisLoading ? "Analyzing..." : "Analyze Selected Resume"}</span>
-              </button>
+      {/* Main Header Hero */}
+      <header className="job-details-hero card">
+        <div className="hero-main-row">
+          <div className="hero-info-col">
+            <h1 className="job-hero-title">{job.title}</h1>
+            <div className="job-hero-meta">
+              <span className="hero-company">{job.company}</span>
+              {job.location && (
+                <>
+                  <span className="meta-sep">•</span>
+                  <span className="hero-location">
+                    <MapPin size={14} />
+                    <span>{job.location}</span>
+                  </span>
+                </>
+              )}
+              {job.employment_type && (
+                <>
+                  <span className="meta-sep">•</span>
+                  <span>{job.employment_type}</span>
+                </>
+              )}
+              {job.experience_level && (
+                <>
+                  <span className="meta-sep">•</span>
+                  <span>{job.experience_level}</span>
+                </>
+              )}
             </div>
           </div>
-        )}
-      </Modal>
 
-      {/* === Tailor My Resume Modal === */}
-      <TailoringModal
-        job={job}
-        isOpen={tailorOpen}
-        onClose={closeTailor}
-        onSuccess={handleTailorSuccess}
-      />
-
-      {/* === Inline Tailored Result === */}
-      {tailorResult && (
-        <div className="tailored-result-wrap">
-          {tailorError && (
-            <div className="alert alert-error" role="alert">
-              <AlertCircle size={16} />
-              <span>{tailorError}</span>
-            </div>
-          )}
-          <TailoredResult
-            result={tailorResult}
-            jobTitle={job.title}
-            jobCompany={job.company}
-            onRegenerate={handleRegenerate}
-            onTailorAnother={openTailor}
-            onBack={handleTailorBack}
-            regenerating={tailorRegenerating}
-          />
+          <div className="hero-score-col">
+            <ScoreBadge score={overallScore} size="large" />
+          </div>
         </div>
-      )}
 
-      {/* === Hero Role Header === */}
-      <header className="job-workspace-header">
-        <div className="job-workspace-top">
-          <div className="job-workspace-brand">
-            <div className="job-workspace-logo">
-              <Building2 size={24} />
-            </div>
-            <div>
-              <span className="job-workspace-company">{job.company}</span>
-              <h1 className="job-workspace-title">{job.title}</h1>
-            </div>
-          </div>
-
-          <div className="job-workspace-primary-cta">
-            <button className="btn btn-primary btn-lg" onClick={openTailor} type="button">
-              <Wand2 size={18} />
-              <span>Tailor My Resume</span>
-            </button>
-            <button className="btn btn-outline btn-lg" onClick={openAnalyze} type="button">
-              <FileSearch size={18} />
-              <span>Analyze Resume</span>
-            </button>
-            <Link to={`/discover/${job.id}/match`} className="btn btn-secondary btn-lg">
+        {/* Primary Action Button Bar */}
+        <div className="hero-actions-bar">
+          <div className="hero-primary-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-lg"
+              onClick={() => setTailorOpen(true)}
+            >
               <Sparkles size={18} />
-              <span>Run Match Analysis</span>
-            </Link>
+              <span>{t("action.tailorResume", "Tailor My Resume")}</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={openAnalyze}
+            >
+              <FileSearch size={16} />
+              <span>{t("action.analyzeResume", "Analyze Resume")}</span>
+            </button>
+
+            {job.url && (
+              <a
+                href={job.url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost"
+              >
+                <span>{t("jobDetail.applyExternal", "Apply Externally")}</span>
+                <ExternalLink size={15} />
+              </a>
+            )}
+          </div>
+
+          {/* Application status quick picker */}
+          <div className="hero-status-wrap">
+            <span className="status-label">Status:</span>
+            <select
+              className="status-select"
+              value={application?.status || "Saved"}
+              onChange={(e) => handleUpdateStatus(e.target.value)}
+              disabled={savingApp}
+            >
+              <option value="Saved">Saved</option>
+              <option value="Applied">Applied</option>
+              <option value="Interview">Interview</option>
+              <option value="Offer">Offer</option>
+              <option value="Rejected">Rejected</option>
+            </select>
           </div>
         </div>
-
-        <div className="job-workspace-meta-chips">
-          {job.location && (
-            <div className="meta-chip">
-              <MapPin size={14} />
-              <span>{job.location}</span>
-            </div>
-          )}
-          {job.employment_type && (
-            <div className="meta-chip">
-              <Briefcase size={14} />
-              <span>{job.employment_type}</span>
-            </div>
-          )}
-          {job.experience_level && (
-            <div className="meta-chip">
-              <BarChart3 size={14} />
-              <span>{job.experience_level}</span>
-            </div>
-          )}
-          {job.source && (
-            <div className="meta-chip">
-              <Globe size={14} />
-              <span>Source: {job.source}</span>
-            </div>
-          )}
-          {job.created_at && (
-            <div className="meta-chip">
-              <Clock size={14} />
-              <span>Discovered {new Date(job.created_at).toLocaleDateString()}</span>
-            </div>
-          )}
-        </div>
-
-        <p className="resume-match-context" style={{ marginTop: "var(--space-3)" }}>
-          <strong>Resume Match</strong> compares an uploaded resume to this job.{" "}
-          <strong>Match Analysis</strong> compares your CareerPilot profile to this job.
-        </p>
       </header>
 
-      {/* === Decision Workspace Two-Column Grid === */}
-      <div className="job-workspace-grid">
-        {/* Left Column: Description & Responsibilities */}
-        <div className="job-workspace-main">
+      {/* Tabs Navigation */}
+      <div className="job-details-tabs" role="tablist">
+        <button
+          type="button"
+          className={`details-tab ${activeTab === "overview" ? "active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+          role="tab"
+          aria-selected={activeTab === "overview"}
+        >
+          <span>{t("jobDetail.overview", "Overview & Requirements")}</span>
+        </button>
+
+        <button
+          type="button"
+          className={`details-tab ${activeTab === "fit" ? "active" : ""}`}
+          onClick={() => setActiveTab("fit")}
+          role="tab"
+          aria-selected={activeTab === "fit"}
+        >
+          <span>{t("jobDetail.yourFit", "Your Fit")} ({overallScore}%)</span>
+        </button>
+
+        <button
+          type="button"
+          className={`details-tab ${activeTab === "resume" ? "active" : ""}`}
+          onClick={openAnalyze}
+          role="tab"
+          aria-selected={activeTab === "resume"}
+        >
+          <span>{t("jobDetail.resumeMatch", "Resume Match")}</span>
+        </button>
+      </div>
+
+      {/* Tab 1: Overview */}
+      {activeTab === "overview" && (
+        <div className="job-overview-stack">
+          {/* Required Skills */}
+          {Array.isArray(job.required_skills) && job.required_skills.length > 0 && (
+            <section className="card">
+              <div className="card-header">
+                <h3>{t("jobDetail.skills", "Required Skills")}</h3>
+              </div>
+              <div className="card-body">
+                <div className="skills-chips-wrap">
+                  {job.required_skills.map((s) => (
+                    <span key={s} className="skill-chip match">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Job Description */}
           <section className="card">
             <div className="card-header">
-              <h2>Role Description & Context</h2>
+              <h3>Role Overview & Details</h3>
             </div>
-            <div className="card-body">
+            <div className="card-body job-description-body">
               {job.description ? (
-                <div className="job-description-content">
+                <div className="formatted-description">
                   {job.description.split("\n").map((para, i) =>
-                    para.trim() ? <p key={i}>{para}</p> : null
+                    para.trim() ? <p key={i}>{para}</p> : <br key={i} />
                   )}
                 </div>
               ) : (
                 <p className="text-secondary">
-                  No detailed description provided for this listing. You can run Match Analysis using the required skills.
+                  No detailed description was provided for this opportunity. Use "Tailor My Resume" to optimize against the role title and required skills.
                 </p>
               )}
             </div>
           </section>
         </div>
+      )}
 
-        {/* Right Column: Required Skills & Action Deck */}
-        <aside className="job-workspace-sidebar">
-          {/* Match Analysis Callout */}
-          <div className="card card-highlight">
-            <div className="card-header">
-              <h3>
-                <Sparkles size={16} className="text-accent" />
-                <span>AI Fit Evaluation</span>
-              </h3>
-            </div>
-            <div className="card-body">
-              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                Compare your technical skills, projects, and work experience against this position's requirements.
-              </p>
-              <Link to={`/discover/${job.id}/match`} className="btn btn-primary btn-block">
-                <Sparkles size={16} />
-                <span>Inspect Match Breakdown</span>
-              </Link>
-            </div>
-          </div>
-
-          {/* Tailor My Resume Callout */}
-          <div className="card">
-            <div className="card-header">
-              <h3>
-                <Wand2 size={16} className="text-accent" />
-                <span>Tailor My Resume</span>
-              </h3>
-            </div>
-            <div className="card-body">
-              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                Generate a resume version tailored to this role. Your original
-                resume stays unchanged.
-              </p>
-              <button className="btn btn-primary btn-block" onClick={openTailor} type="button">
-                <Wand2 size={16} />
-                <span>Tailor My Resume</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Resume Match Callout */}
-          <div className="card">
-            <div className="card-header">
-              <h3>
-                <FileSearch size={16} className="text-accent" />
-                <span>Resume Match</span>
-              </h3>
-            </div>
-            <div className="card-body">
-              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                Compare an uploaded resume (skills, keywords, projects, experience, education) against this role.
-              </p>
-              <button className="btn btn-outline btn-block" onClick={openAnalyze} type="button">
-                <FileSearch size={16} />
-                <span>Analyze Resume</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Required Skills */}
-          {job.required_skills?.length > 0 && (
-            <div className="card">
-              <div className="card-header">
-                <h3>Required Skills ({job.required_skills.length})</h3>
+      {/* Tab 2: Your Fit (Visual Profile Match) */}
+      {activeTab === "fit" && (
+        <div className="fit-analysis-stack">
+          {/* Hero Match Box */}
+          <section className="card fit-hero-card">
+            <div className="fit-hero-content">
+              <div>
+                <span className="section-eyebrow">YOUR FIT</span>
+                <div className="fit-score-display">
+                  <span className="fit-score-number font-mono">{overallScore}%</span>
+                  <span className="fit-score-badge">
+                    {overallScore >= 80 ? "Excellent Match" : overallScore >= 60 ? "Strong Match" : "Moderate Match"}
+                  </span>
+                </div>
+                <p className="fit-hero-desc">
+                  Based on your verified skills, projects, and work history compared to this position.
+                </p>
               </div>
-              <div className="card-body">
-                <div className="job-skills-tags-wrap">
-                  {job.required_skills.map((s) => (
-                    <span key={s} className="skill-tag">{s}</span>
-                  ))}
+
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowScoreExplainer(true)}
+              >
+                <HelpCircle size={15} />
+                <span>How this score works</span>
+              </button>
+            </div>
+
+            {/* Horizontal Factor Bars */}
+            <div className="fit-factors-bars">
+              <div className="factor-bar-item">
+                <div className="factor-bar-header">
+                  <span>{t("jobDetail.skills", "Skills")}</span>
+                  <span className="font-mono">{factorScores.skills || 0}%</span>
+                </div>
+                <div className="score-bar-track">
+                  <div className="score-bar-fill" style={{ width: `${factorScores.skills || 0}%`, background: "var(--accent)" }} />
+                </div>
+              </div>
+
+              <div className="factor-bar-item">
+                <div className="factor-bar-header">
+                  <span>{t("jobDetail.projects", "Projects")}</span>
+                  <span className="font-mono">{factorScores.projects || 0}%</span>
+                </div>
+                <div className="score-bar-track">
+                  <div className="score-bar-fill" style={{ width: `${factorScores.projects || 0}%`, background: "var(--accent)" }} />
+                </div>
+              </div>
+
+              <div className="factor-bar-item">
+                <div className="factor-bar-header">
+                  <span>{t("jobDetail.experience", "Experience")}</span>
+                  <span className="font-mono">{factorScores.experience || 0}%</span>
+                </div>
+                <div className="score-bar-track">
+                  <div className="score-bar-fill" style={{ width: `${factorScores.experience || 0}%`, background: "var(--accent)" }} />
+                </div>
+              </div>
+
+              <div className="factor-bar-item">
+                <div className="factor-bar-header">
+                  <span>{t("jobDetail.role", "Role Alignment")}</span>
+                  <span className="font-mono">{factorScores.role || 0}%</span>
+                </div>
+                <div className="score-bar-track">
+                  <div className="score-bar-fill" style={{ width: `${factorScores.role || 0}%`, background: "var(--accent)" }} />
+                </div>
+              </div>
+
+              <div className="factor-bar-item">
+                <div className="factor-bar-header">
+                  <span>{t("jobDetail.location", "Location")}</span>
+                  <span className="font-mono">{factorScores.location || 0}%</span>
+                </div>
+                <div className="score-bar-track">
+                  <div className="score-bar-fill" style={{ width: `${factorScores.location || 0}%`, background: "var(--accent)" }} />
                 </div>
               </div>
             </div>
-          )}
+          </section>
 
-          {/* Application Pipeline Action */}
-          <div className="card">
-            <div className="card-header">
-              <h3>Take Action</h3>
+          {/* Why you match vs Missing skills */}
+          <div className="grid-2">
+            <section className="card match-reasons-card success">
+              <div className="card-header">
+                <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <CheckCircle2 size={18} className="text-success" />
+                  <span>{t("jobDetail.whyYouMatch", "Why You Match")}</span>
+                </h3>
+              </div>
+              <div className="card-body">
+                {matchedSkills.length > 0 ? (
+                  <div className="skills-chips-wrap">
+                    {matchedSkills.map((s) => (
+                      <span key={s} className="skill-chip match">
+                        ✓ {s}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-secondary text-sm">Relevant technical background aligns with this role.</p>
+                )}
+              </div>
+            </section>
+
+            <section className="card match-reasons-card warning">
+              <div className="card-header">
+                <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <AlertTriangle size={18} className="text-warning" />
+                  <span>{t("jobDetail.missingSkills", "Skills to Strengthen")}</span>
+                </h3>
+              </div>
+              <div className="card-body">
+                {missingSkills.length > 0 ? (
+                  <div className="skills-chips-wrap">
+                    {missingSkills.map((s) => (
+                      <span key={s} className="skill-chip missing">
+                        ⚠ {s}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-success text-sm font-medium">
+                    No critical missing skills detected for this position!
+                  </p>
+                )}
+              </div>
+            </section>
+          </div>
+        </div>
+      )}
+
+      {/* Analyze Resume Modal */}
+      {analyzeOpen && (
+        <Modal
+          isOpen={analyzeOpen}
+          onClose={() => setAnalyzeOpen(false)}
+          title="Resume Match Analysis"
+        >
+          {analysisError && (
+            <div className="alert alert-error">
+              <AlertTriangle size={16} />
+              <span>{analysisError}</span>
             </div>
-            <div className="card-body">
-              <Link to="/pipeline" className="btn btn-outline btn-block">
-                <Layers size={16} />
-                <span>Track in Application Pipeline</span>
-              </Link>
-
-              {job.url && (
-                <a
-                  href={job.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-secondary btn-block"
-                  style={{ marginTop: "var(--space-2)" }}
+          )}
+          {analysisLoading ? (
+            <div className="analysis-loading-state">
+              <div className="spinner-inline" />
+              <p>Analyzing resume against this job...</p>
+            </div>
+          ) : analysis ? (
+            <div className="resume-match-report">
+              <div className="analysis-score-banner">
+                <div>
+                  <span className="section-eyebrow">RESUME FIT</span>
+                  <div className="analysis-score-number font-mono">{analysis.overall_score}%</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setAnalysis(null)}
                 >
-                  <ExternalLink size={16} />
-                  <span>Apply on Company Site</span>
-                </a>
+                  Analyze Different Resume
+                </button>
+              </div>
+
+              <div className="stack" style={{ gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
+                <h4>Score Factors</h4>
+                {analysis.scores &&
+                  Object.entries(analysis.scores).map(([key, val]) => (
+                    <div key={key} className="factor-bar-item">
+                      <div className="factor-bar-header">
+                        <span style={{ textTransform: "capitalize" }}>{key}</span>
+                        <span className="font-mono">{val}%</span>
+                      </div>
+                      <div className="score-bar-track">
+                        <div className="score-bar-fill" style={{ width: `${val}%`, background: "var(--accent)" }} />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+
+              <div className="modal-footer" style={{ marginTop: "var(--space-4)" }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setAnalyzeOpen(false);
+                    setTailorOpen(true);
+                  }}
+                >
+                  <Sparkles size={16} />
+                  <span>Tailor My Resume for this Role</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="resume-select-prompt">
+              <p className="text-secondary text-sm">
+                Select an uploaded resume to evaluate deterministic alignment against <strong>{job.title}</strong>:
+              </p>
+
+              {resumes.length === 0 ? (
+                <div className="empty-resumes-prompt">
+                  <p>No resumes uploaded yet.</p>
+                  <Link to="/resumes" className="btn btn-primary btn-sm">
+                    Upload Resume
+                  </Link>
+                </div>
+              ) : (
+                <div className="resumes-pick-list">
+                  {resumes.map((r) => (
+                    <label key={r.id} className={`resume-pick-item ${selectedResumeId === r.id ? "selected" : ""}`}>
+                      <input
+                        type="radio"
+                        name="resume_pick"
+                        checked={selectedResumeId === r.id}
+                        onChange={() => setSelectedResumeId(r.id)}
+                      />
+                      <div className="pick-info">
+                        <strong>{r.filename}</strong>
+                        <span className="text-xs text-muted">
+                          {r.parsing_status === "completed" ? "✓ Parsed" : r.parsing_status}
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+
+                  <div className="modal-footer" style={{ marginTop: "var(--space-4)" }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setAnalyzeOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={runResumeAnalysis}
+                      disabled={!selectedResumeId}
+                    >
+                      Run Resume Analysis
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
+          )}
+        </Modal>
+      )}
+
+      {/* AI Tailoring Wizard Modal */}
+      {tailorOpen && (
+        <TailoringModal
+          isOpen={tailorOpen}
+          onClose={() => setTailorOpen(false)}
+          job={job}
+          onSuccess={(res) => {
+            setTailorOpen(false);
+            setTailorResult(res);
+          }}
+        />
+      )}
+
+      {/* Score Explainer Dialog */}
+      {showScoreExplainer && (
+        <Modal
+          isOpen={showScoreExplainer}
+          onClose={() => setShowScoreExplainer(false)}
+          title="How Match Scores Work"
+        >
+          <div className="score-explainer-body">
+            <p className="text-secondary text-sm">
+              CareerPilot computes your overall fit using a balanced 5-factor weighted algorithm comparing your verified profile against role requirements:
+            </p>
+            <ul className="score-factors-explanation">
+              <li>
+                <strong>Skills Alignment (40%):</strong> Compares your declared technical skills directly to requirements.
+              </li>
+              <li>
+                <strong>Project Relevance (20%):</strong> Evaluates project tools, repositories, and technical stack.
+              </li>
+              <li>
+                <strong>Experience Depth (20%):</strong> Evaluates years and depth of relevant positions.
+              </li>
+              <li>
+                <strong>Role Alignment (15%):</strong> Analyzes title hierarchy and domain scope.
+              </li>
+              <li>
+                <strong>Location Match (5%):</strong> Verifies remote, hybrid, or regional compatibility.
+              </li>
+            </ul>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setShowScoreExplainer(false)}
+              >
+                Got It
+              </button>
+            </div>
           </div>
-        </aside>
-      </div>
+        </Modal>
+      )}
     </div>
   );
-}
-
-function isResumeAnalyzable(resume) {
-  return resume.parsing_status === "completed" && !resume.parsing_error;
-}
-
-function parsingStatusLabel(resume) {
-  const status = resume.parsing_status || "pending";
-  if (status === "completed" && !resume.parsing_error) return "Analyzed";
-  if (status === "completed") return "Scanned / no text";
-  if (status === "failed") return "Analysis failed";
-  return "Pending analysis";
 }

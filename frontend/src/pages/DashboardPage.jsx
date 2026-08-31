@@ -1,394 +1,457 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useTranslation } from "../context/LanguageContext";
 import { api } from "../services/api";
-import StatusBadge from "../components/StatusBadge";
 import ScoreBadge from "../components/ScoreBadge";
-import EmptyState from "../components/EmptyState";
 import { SkeletonCard } from "../components/Skeleton";
+import OnboardingModal from "../components/OnboardingModal";
 import {
   Compass,
   Briefcase,
-  Target,
   FileText,
-  TrendingUp,
+  Layers,
   ArrowRight,
   Sparkles,
   CheckCircle2,
-  Calendar,
-  Zap,
-  User,
   Upload,
+  Clock,
+  MapPin,
 } from "lucide-react";
 
 export default function DashboardPage() {
   const { currentUser } = useAuth();
-  const [data, setData] = useState(null);
+  const { t } = useTranslation();
+
+  const [dashData, setDashData] = useState(null);
   const [recommended, setRecommended] = useState([]);
+  const [profileData, setProfileData] = useState(null);
+  const [resumes, setResumes] = useState([]);
+  const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [dashResult, recsResult, profResult, resResult, appsResult] = await Promise.all([
+        api.get("/analytics/dashboard").catch(() => null),
+        api.get("/jobs/recommended").catch(() => []),
+        api.get("/profile/").catch(() => null),
+        api.get("/resumes").catch(() => []),
+        api.get("/applications/").catch(() => []),
+      ]);
+
+      const normalizedRecs = (Array.isArray(recsResult) ? recsResult : []).map((item) => {
+        if (item && item.job) {
+          return {
+            ...item.job,
+            match_score: item.match_score ?? item.job.match_score ?? 0,
+            matched_skills: item.matched_skills ?? item.job.matched_skills ?? [],
+            missing_skills: item.missing_skills ?? item.job.missing_skills ?? [],
+            relevant_projects: item.relevant_projects ?? item.job.relevant_projects ?? [],
+          };
+        }
+        return item;
+      });
+
+      setDashData(dashResult);
+      setRecommended(normalizedRecs);
+      setProfileData(profResult);
+      setResumes(Array.isArray(resResult) ? resResult : []);
+      setApplications(Array.isArray(appsResult) ? appsResult : []);
+
+      // If user has zero profile skills and zero resumes, auto-prompt onboarding once
+      if (
+        (!profResult?.skills || profResult.skills.length === 0) &&
+        (!resResult || resResult.length === 0) &&
+        !sessionStorage.getItem("cp_onboarding_shown")
+      ) {
+        setShowOnboarding(true);
+        sessionStorage.setItem("cp_onboarding_shown", "true");
+      }
+    } catch (err) {
+      console.error("Dashboard data load error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [dashResult, recsResult] = await Promise.all([
-          api.get("/analytics/dashboard").catch(() => null),
-          api.get("/jobs/recommended").catch(() => []),
-        ]);
-        setData(dashResult);
-        setRecommended(Array.isArray(recsResult) ? recsResult.slice(0, 3) : []);
-      } catch (err) {
-        console.error("Failed to load dashboard data:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
     loadData();
-  }, []);
+  }, [loadData]);
 
   const displayName = currentUser?.displayName || currentUser?.email?.split("@")[0] || "there";
 
-  // Determine intelligent greeting based on local time
+  // Time-aware greeting
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const greeting =
+    hour < 12
+      ? t("dash.greetingMorning", "Good morning")
+      : hour < 18
+      ? t("dash.greetingAfternoon", "Good afternoon")
+      : t("dash.greetingEvening", "Good evening");
 
-  // Compute the single highest priority "Next Best Action"
-  const getNextBestAction = () => {
-    if (!data) {
-      return {
-        title: "Build your professional career profile",
-        desc: "Add your technical skills, projects, and work experience to start generating precision match scores.",
-        link: "/profile",
-        cta: "Complete Profile",
-        icon: User,
-        variant: "accent",
-      };
-    }
+  // Determine user state
+  const hasProfile = Boolean(profileData?.skills && profileData.skills.length > 0);
+  const hasResumes = resumes.length > 0;
+  const hasApplications = applications.length > 0;
 
-    if (data.offer_count > 0) {
-      return {
-        title: `You have ${data.offer_count} active job offer${data.offer_count > 1 ? "s" : ""}!`,
-        desc: "Review your offer details, milestones, and compensation notes in your application pipeline.",
-        link: "/pipeline",
-        cta: "View Pipeline",
-        icon: CheckCircle2,
-        variant: "success",
-      };
-    }
+  // Profile readiness percentage
+  let readiness = 20;
+  if (currentUser?.displayName) readiness += 15;
+  if (hasResumes) readiness += 25;
+  if (hasProfile) readiness += 25;
+  if (profileData?.experiences?.length > 0 || profileData?.projects?.length > 0) readiness += 15;
+  readiness = Math.min(100, readiness);
 
-    if (data.interview_count > 0) {
-      return {
-        title: `${data.interview_count} interview round${data.interview_count > 1 ? "s" : ""} in progress`,
-        desc: "Keep momentum high. Review role requirements and prepare your project talking points.",
-        link: "/pipeline",
-        cta: "Prepare Interviews",
-        icon: Calendar,
-        variant: "accent",
-      };
-    }
-
-    if (data.high_match_jobs > 0 || recommended.length > 0) {
-      return {
-        title: `${data.high_match_jobs || recommended.length} high-fit opportunities available`,
-        desc: "New roles closely align with your technical skills. Review match breakdowns and submit applications.",
-        link: "/discover",
-        cta: "Review Opportunities",
-        icon: Sparkles,
-        variant: "accent",
-      };
-    }
-
-    if (data.total_jobs === 0) {
-      return {
-        title: "Discover your first opportunities",
-        desc: "Search aggregated job boards or add custom target roles to calculate transparent match scores.",
-        link: "/discover",
-        cta: "Discover Jobs",
-        icon: Compass,
-        variant: "accent",
-      };
-    }
-
-    return {
-      title: "Keep your application pipeline active",
-      desc: "Track submissions, follow up on pending reviews, and inspect frequently missing skills.",
-      link: "/pipeline",
-      cta: "Open Pipeline",
-      icon: Zap,
-      variant: "neutral",
-    };
-  };
-
-  const nextAction = getNextBestAction();
+  // Highest fit job (State C & D)
+  const bestOpportunity = recommended.length > 0 ? recommended[0] : null;
 
   if (loading) {
     return (
       <div className="page">
-        <div className="page-header">
-          <div className="skeleton skeleton-title" style={{ width: 280, height: 32 }} />
-          <div className="skeleton skeleton-text" style={{ width: 400, marginTop: 8 }} />
-        </div>
-        <div className="grid-2">
+        <header className="page-header">
+          <div className="skeleton" style={{ height: "36px", width: "260px" }} />
+          <div className="skeleton" style={{ height: "20px", width: "340px", marginTop: "8px" }} />
+        </header>
+        <div className="stack" style={{ gap: "var(--space-6)" }}>
           <SkeletonCard />
-          <SkeletonCard />
+          <div className="grid-3">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="page">
-      {/* === Executive Briefing Header === */}
+    <div className="page dashboard-page">
+      {/* Page Header */}
       <header className="page-header">
         <div className="page-header-row">
           <div>
             <h1>{greeting}, {displayName}</h1>
-            <p>Welcome to your personal career command center</p>
+            <p>{t("dash.subtitle", "Here's what needs your attention.")}</p>
           </div>
+
           <div className="page-header-actions">
-            <Link to="/discover" className="btn btn-primary btn-sm">
-              <Compass size={14} />
-              <span>Discover Roles</span>
+            <Link to="/discover" className="btn btn-primary">
+              <Compass size={16} />
+              <span>{t("action.findJobsForMe", "Find Jobs for Me")}</span>
             </Link>
           </div>
         </div>
       </header>
 
-      {/* === Next Best Action Banner === */}
-      <section className={`command-action-banner banner-${nextAction.variant}`} aria-label="Next best action">
-        <div className="command-action-icon">
-          <nextAction.icon size={24} />
+      {/* =========================================================================
+          STATE A: NEW USER / INCOMPLETE PROFILE
+          ========================================================================= */}
+      {!hasProfile && !hasResumes && (
+        <section className="card state-banner-card">
+          <div className="state-banner-inner">
+            <div className="state-banner-text">
+              <div className="state-badge">
+                <Sparkles size={14} />
+                <span>Get Started</span>
+              </div>
+              <h2>Let's get your profile ready for precision job matching</h2>
+              <p>
+                CareerPilot compares your actual skills and projects against live job listings.
+                Complete your profile or upload a resume to unlock tailored recommendations.
+              </p>
+              <div className="state-progress-row">
+                <span className="text-sm font-medium">Profile Readiness: {readiness}%</span>
+                <div className="score-bar-track" style={{ flex: 1, maxWidth: "240px" }}>
+                  <div
+                    className="score-bar-fill"
+                    style={{ width: `${readiness}%`, background: "var(--accent)" }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="state-banner-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setShowOnboarding(true)}
+              >
+                <span>Complete Profile</span>
+                <ArrowRight size={16} />
+              </button>
+              <Link to="/resumes" className="btn btn-secondary">
+                <Upload size={16} />
+                <span>Upload Resume</span>
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* =========================================================================
+          YOUR NEXT BEST OPPORTUNITY (Primary Card)
+          ========================================================================= */}
+      {bestOpportunity && (
+        <section className="next-opportunity-section">
+          <div className="section-label-row">
+            <span className="section-eyebrow">{t("dash.nextBestOpportunity", "Your Next Best Opportunity")}</span>
+          </div>
+
+          <div className="card highlight-card">
+            <div className="highlight-card-body">
+              <div className="highlight-card-main">
+                <div className="highlight-header-row">
+                  <div>
+                    <h2 className="highlight-title">{bestOpportunity.title}</h2>
+                    <p className="highlight-company">
+                      {bestOpportunity.company}
+                      {bestOpportunity.location && ` • ${bestOpportunity.location}`}
+                      {bestOpportunity.employment_type && ` • ${bestOpportunity.employment_type}`}
+                      {bestOpportunity.experience_level && ` • ${bestOpportunity.experience_level}`}
+                    </p>
+                  </div>
+
+                  <div className="highlight-score-wrap">
+                    <ScoreBadge score={bestOpportunity.match_score || 0} size="large" />
+                  </div>
+                </div>
+
+                {/* Skills Preview */}
+                {Array.isArray(bestOpportunity.required_skills) && bestOpportunity.required_skills.length > 0 && (
+                  <div className="highlight-skills-row">
+                    {bestOpportunity.required_skills.slice(0, 6).map((sk) => (
+                      <span key={sk} className="skill-chip match">
+                        {sk}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Match Summary points */}
+                <div className="highlight-points-row">
+                  <span className="point-item positive">
+                    <CheckCircle2 size={15} className="text-success" />
+                    <span>High alignment with your technical profile</span>
+                  </span>
+                  {bestOpportunity.created_at && (
+                    <span className="point-item neutral">
+                      <Clock size={15} className="text-tertiary" />
+                      <span>Added recently</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="highlight-card-actions">
+                <Link to={`/discover/${bestOpportunity.id}`} className="btn btn-primary btn-block">
+                  <span>{t("action.viewOpportunity", "View Opportunity")}</span>
+                  <ArrowRight size={16} />
+                </Link>
+                <Link
+                  to={`/discover/${bestOpportunity.id}`}
+                  state={{ openTailor: true }}
+                  className="btn btn-secondary btn-block"
+                >
+                  <Sparkles size={16} />
+                  <span>{t("action.tailorResume", "Tailor My Resume")}</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* =========================================================================
+          CONTINUE WHERE YOU LEFT OFF (Actionable Guidance)
+          ========================================================================= */}
+      <section className="continue-section">
+        <div className="section-label-row">
+          <span className="section-eyebrow">{t("dash.continueWhereLeftOff", "Continue Where You Left Off")}</span>
         </div>
-        <div className="command-action-content">
-          <div className="command-action-eyebrow">Recommended Next Step</div>
-          <h2 className="command-action-title">{nextAction.title}</h2>
-          <p className="command-action-desc">{nextAction.desc}</p>
-        </div>
-        <div className="command-action-cta">
-          <Link to={nextAction.link} className="btn btn-primary">
-            <span>{nextAction.cta}</span>
-            <ArrowRight size={16} />
-          </Link>
+
+        <div className="grid-3">
+          {/* Resume state card */}
+          <div className="card guidance-card">
+            <div className="guidance-icon-wrap accent">
+              <FileText size={20} />
+            </div>
+            <div className="guidance-content">
+              <h3>{hasResumes ? "Resume is ready" : "Upload your resume"}</h3>
+              <p>
+                {hasResumes
+                  ? `${resumes.length} active resume${resumes.length > 1 ? "s" : ""} uploaded and parsed.`
+                  : "Upload a PDF resume to enable AI tailoring and keyword analysis."}
+              </p>
+              <Link to="/resumes" className="guidance-link">
+                <span>{hasResumes ? "Manage Resumes" : "Upload Resume"}</span>
+                <ArrowRight size={14} />
+              </Link>
+            </div>
+          </div>
+
+          {/* Applications state card */}
+          <div className="card guidance-card">
+            <div className="guidance-icon-wrap success">
+              <Layers size={20} />
+            </div>
+            <div className="guidance-content">
+              <h3>
+                {hasApplications
+                  ? `${applications.length} Active Application${applications.length > 1 ? "s" : ""}`
+                  : "Track your job submissions"}
+              </h3>
+              <p>
+                {hasApplications
+                  ? `${dashData?.interview_count || 0} interviews scheduled · ${dashData?.offer_count || 0} offers received.`
+                  : "Move saved roles through Applied, Interview, and Offer milestones."}
+              </p>
+              <Link to="/pipeline" className="guidance-link">
+                <span>View Applications</span>
+                <ArrowRight size={14} />
+              </Link>
+            </div>
+          </div>
+
+          {/* Opportunities discovery card */}
+          <div className="card guidance-card">
+            <div className="guidance-icon-wrap warning">
+              <Compass size={20} />
+            </div>
+            <div className="guidance-content">
+              <h3>{dashData?.high_match_jobs ? `${dashData.high_match_jobs} Strong Matches` : "Discover opportunities"}</h3>
+              <p>
+                {recommended.length > 0
+                  ? "Roles closely aligned with your verified background."
+                  : "Run personalized job discovery to fetch roles fitting your profile."}
+              </p>
+              <Link to="/discover" className="guidance-link">
+                <span>Explore Jobs</span>
+                <ArrowRight size={14} />
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* === Workspace Content Grid === */}
-      <div className="command-workspace-grid">
-        {/* Left Column: Top Opportunities Spotlight & Active Pipeline */}
-        <div className="command-main-column">
-          {/* Top Opportunities Spotlight */}
-          <div className="command-section">
-            <div className="section-header">
-              <h2>
-                <Sparkles size={18} className="text-accent" />
-                <span>Top Opportunities Spotlight</span>
-              </h2>
-              <Link to="/discover" className="btn btn-ghost btn-sm">
-                <span>View all</span>
-                <ArrowRight size={14} />
-              </Link>
+      {/* =========================================================================
+          RECOMMENDED FOR YOU (3-4 Job Cards)
+          ========================================================================= */}
+      {recommended.length > 1 && (
+        <section className="recommended-section">
+          <div className="section-header-row">
+            <div>
+              <h2>{t("dash.recommendedForYou", "Recommended For You")}</h2>
+              <p>Opportunities matching your technical profile and preferences</p>
             </div>
+            <Link to="/discover" className="btn btn-ghost btn-sm">
+              <span>{t("dash.viewAllJobs", "View All Opportunities")}</span>
+              <ArrowRight size={14} />
+            </Link>
+          </div>
 
-            {recommended.length > 0 ? (
-              <div className="command-opportunities-list">
-                {recommended.map((r) => {
-                  const job = r.job || r;
-                  return (
-                    <div key={job.id} className="command-opportunity-card">
-                      <div className="opportunity-card-top">
-                        <div>
-                          <Link to={`/discover/${job.id}`} className="opportunity-role-title">
-                            {job.title}
-                          </Link>
-                          <span className="opportunity-company">{job.company}</span>
-                        </div>
-                        <ScoreBadge score={r.score} />
-                      </div>
+          <div className="grid-3">
+            {recommended.slice(1, 4).map((job) => (
+              <div key={job.id} className="card job-card-mini">
+                <div className="job-card-mini-top">
+                  <div>
+                    <h3 className="job-title-compact">{job.title}</h3>
+                    <p className="job-company-compact">{job.company}</p>
+                  </div>
+                  <ScoreBadge score={job.match_score || 0} />
+                </div>
 
-                      {r.matched_skills?.length > 0 && (
-                        <div className="opportunity-skills-row">
-                          <span className="opportunity-skills-label">Matched:</span>
-                          {r.matched_skills.slice(0, 4).map((s) => (
-                            <span key={s} className="skill-tag skill-matched">{s}</span>
-                          ))}
-                          {r.matched_skills.length > 4 && (
-                            <span className="skill-tag skill-more">+{r.matched_skills.length - 4}</span>
-                          )}
-                        </div>
-                      )}
+                <div className="job-meta-row">
+                  {job.location && (
+                    <span className="meta-item">
+                      <MapPin size={13} />
+                      <span>{job.location}</span>
+                    </span>
+                  )}
+                  {job.employment_type && (
+                    <span className="meta-item">
+                      <Briefcase size={13} />
+                      <span>{job.employment_type}</span>
+                    </span>
+                  )}
+                </div>
 
-                      <div className="opportunity-card-footer">
-                        <span className="opportunity-location">
-                          {job.location || "Remote friendly"}
-                        </span>
-                        <Link to={`/discover/${job.id}`} className="btn btn-outline btn-sm">
-                          View Opportunity
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : data?.recent_jobs?.length > 0 ? (
-              <div className="command-opportunities-list">
-                {data.recent_jobs.slice(0, 3).map((job) => (
-                  <div key={job.id} className="command-opportunity-card">
-                    <div className="opportunity-card-top">
-                      <div>
-                        <Link to={`/discover/${job.id}`} className="opportunity-role-title">
-                          {job.title}
-                        </Link>
-                        <span className="opportunity-company">{job.company}</span>
-                      </div>
-                    </div>
-                    <div className="opportunity-card-footer">
-                      <span className="opportunity-location">
-                        {job.location || "Location not specified"}
+                {Array.isArray(job.required_skills) && job.required_skills.length > 0 && (
+                  <div className="job-skills-compact">
+                    {job.required_skills.slice(0, 3).map((s) => (
+                      <span key={s} className="skill-chip-sm">
+                        {s}
                       </span>
-                      <Link to={`/discover/${job.id}`} className="btn btn-outline btn-sm">
-                        View Opportunity
-                      </Link>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={Briefcase}
-                title="No opportunities tracked yet"
-                text="Discover matching roles from top tech boards or add your own target positions."
-                action={
-                  <Link to="/discover" className="btn btn-primary btn-sm">
-                    <Compass size={14} /> Discover Jobs
-                  </Link>
-                }
-              />
-            )}
-          </div>
+                )}
 
-          {/* Active Application Pipeline Momentum */}
-          <div className="command-section">
-            <div className="section-header">
-              <h2>
-                <FileText size={18} className="text-accent" />
-                <span>Application Momentum</span>
-              </h2>
-              <Link to="/pipeline" className="btn btn-ghost btn-sm">
-                <span>Open Pipeline</span>
-                <ArrowRight size={14} />
-              </Link>
-            </div>
-
-            {data?.recent_applications?.length > 0 ? (
-              <div className="command-pipeline-list">
-                {data.recent_applications.slice(0, 4).map((app) => (
-                  <div key={app.id} className="command-pipeline-row">
-                    <div className="pipeline-row-info">
-                      <Link to={`/discover/${app.job_id}`} className="pipeline-row-role">
-                        {app.job_title || "Target Role"}
-                      </Link>
-                      <span className="pipeline-row-company">{app.job_company || "Company"}</span>
-                    </div>
-                    <StatusBadge status={app.status} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={FileText}
-                title="No applications in pipeline"
-                text="Track your first submitted application to monitor your interview progress."
-                action={
-                  <Link to="/pipeline" className="btn btn-secondary btn-sm">
-                    Track Application
+                <div className="job-card-mini-footer">
+                  <Link to={`/discover/${job.id}`} className="btn btn-secondary btn-sm btn-block">
+                    <span>{t("action.viewOpportunity", "View Opportunity")}</span>
                   </Link>
-                }
-              />
-            )}
+                </div>
+              </div>
+            ))}
           </div>
+        </section>
+      )}
+
+      {/* =========================================================================
+          APPLICATION ACTIVITY & COMPACT METRICS
+          ========================================================================= */}
+      <section className="activity-section">
+        <div className="section-header-row">
+          <div>
+            <h2>{t("dash.applicationActivity", "Application Activity")}</h2>
+            <p>Your current pipeline velocity and milestone progress</p>
+          </div>
+          <Link to="/pipeline" className="btn btn-ghost btn-sm">
+            <span>View Full Pipeline</span>
+            <ArrowRight size={14} />
+          </Link>
         </div>
 
-        {/* Right Column: Career Health & Shortcuts */}
-        <div className="command-side-column">
-          {/* Match Score Health */}
-          <div className="card">
-            <div className="card-header">
-              <h3>Match Intelligence Health</h3>
+        <div className="card pipeline-summary-card">
+          <div className="pipeline-funnel-strip">
+            <div className="funnel-step">
+              <span className="funnel-label">Saved</span>
+              <span className="funnel-count font-mono">
+                {applications.filter((a) => a.status?.toLowerCase() === "saved").length}
+              </span>
             </div>
-            <div className="card-body">
-              {data?.average_match_score != null ? (
-                <div className="health-score-widget">
-                  <div className="health-score-ring">
-                    <ScoreBadge score={data.average_match_score} size="large" />
-                  </div>
-                  <p className="health-score-desc">
-                    Average fit across all evaluated positions. Roles above 80% have the highest interview likelihood.
-                  </p>
-                </div>
-              ) : (
-                <div className="health-score-empty">
-                  <p>Run your first match analysis on any job to view your fit score.</p>
-                  <Link to="/discover" className="btn btn-outline btn-sm">
-                    Find a job to match
-                  </Link>
-                </div>
-              )}
+            <div className="funnel-divider">→</div>
+            <div className="funnel-step">
+              <span className="funnel-label">Applied</span>
+              <span className="funnel-count font-mono">
+                {applications.filter((a) => a.status?.toLowerCase() === "applied").length}
+              </span>
             </div>
-          </div>
-
-          {/* Pipeline Funnel Snapshot */}
-          <div className="card">
-            <div className="card-header">
-              <h3>Pipeline Snapshot</h3>
-              <Link to="/insights" className="btn-link" style={{ fontSize: "var(--text-xs)" }}>
-                Insights
-              </Link>
+            <div className="funnel-divider">→</div>
+            <div className="funnel-step">
+              <span className="funnel-label">Interviewing</span>
+              <span className="funnel-count font-mono">
+                {applications.filter((a) => a.status?.toLowerCase() === "interview").length}
+              </span>
             </div>
-            <div className="card-body">
-              <div className="snapshot-stat-rows">
-                <div className="snapshot-stat-item">
-                  <span className="snapshot-stat-label">Saved</span>
-                  <span className="snapshot-stat-value">{data?.saved_count || 0}</span>
-                </div>
-                <div className="snapshot-stat-item">
-                  <span className="snapshot-stat-label">Applied</span>
-                  <span className="snapshot-stat-value">{data?.applied_count || 0}</span>
-                </div>
-                <div className="snapshot-stat-item">
-                  <span className="snapshot-stat-label">Interviews</span>
-                  <span className="snapshot-stat-value text-accent font-bold">{data?.interview_count || 0}</span>
-                </div>
-                <div className="snapshot-stat-item">
-                  <span className="snapshot-stat-label">Offers</span>
-                  <span className="snapshot-stat-value text-success font-bold">{data?.offer_count || 0}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Workspace Shortcuts */}
-          <div className="card">
-            <div className="card-header">
-              <h3>Workspace Shortcuts</h3>
-            </div>
-            <div className="card-body">
-              <nav className="shortcuts-nav">
-                <Link to="/profile" className="shortcut-link">
-                  <User size={16} />
-                  <span>Update Career Profile</span>
-                </Link>
-                <Link to="/resumes" className="shortcut-link">
-                  <Upload size={16} />
-                  <span>Upload or Set Master Resume</span>
-                </Link>
-                <Link to="/insights" className="shortcut-link">
-                  <TrendingUp size={16} />
-                  <span>Inspect Skill Gaps & Trends</span>
-                </Link>
-              </nav>
+            <div className="funnel-divider">→</div>
+            <div className="funnel-step">
+              <span className="funnel-label">Offers</span>
+              <span className="funnel-count font-mono text-success">
+                {applications.filter((a) => a.status?.toLowerCase() === "offer").length}
+              </span>
             </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* Onboarding Dialog */}
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+        profileData={profileData}
+        resumesCount={resumes.length}
+      />
     </div>
   );
 }

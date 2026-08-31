@@ -4,7 +4,6 @@ import Modal from "../components/Modal";
 import EmptyState from "../components/EmptyState";
 import { SkeletonCard } from "../components/Skeleton";
 import {
-  User,
   Briefcase,
   GraduationCap,
   Code2,
