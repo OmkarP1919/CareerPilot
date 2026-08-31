@@ -21,37 +21,72 @@ SCANNED_PDF_ERROR = (
 )
 
 # ---- Section headers commonly found in resumes ------------------------------
-_SECTION_PATTERNS = {
-    "summary": re.compile(
-        r"(?i)^(professional\s+summary|summary|profile|about\s+me|career\s+objective"
-        r"|objective|professional\s+profile|executive\s+summary)\s*[:]?\s*$"
+# Terms are configured once and used to build both whole-line headers
+# ("EXPERIENCE") and inline headers ("Skills: Python, FastAPI").
+_SECTION_TERMS = {
+    "summary": (
+        r"professional\s+summary", r"summary", r"profile", r"about\s+me",
+        r"career\s+objective", r"objective", r"professional\s+profile",
+        r"executive\s+summary",
     ),
-    "skills": re.compile(
-        r"(?i)^(technical\s+skills|skills|core\s+competencies|technologies|"
-        r"areas\s+of\s+expertise|competencies|tech\s+stack)\s*[:]?\s*$"
+    "skills": (
+        r"technical\s+skills", r"skills\s*&\s*technologies",
+        r"skills\s*&\s*tools", r"technical\s+expertise",
+        r"technical\s+proficiencies", r"core\s+skills", r"skills",
+        r"core\s+competencies", r"technologies", r"technologies\s*&\s*tools",
+        r"professional\s+skills", r"areas\s+of\s+expertise",
+        r"competencies", r"skills\s*&\s+abilities", r"tech\s+stack",
     ),
-    "experience": re.compile(
-        r"(?i)^(professional\s+experience|work\s+experience|experience|employment"
-        r"|career\s+history|work\s+history)\s*[:]?\s*$"
+    "experience": (
+        r"professional\s+experience", r"work\s+experience",
+        r"employment\s+history", r"experience", r"employment",
+        r"professional\s+background", r"career\s+history", r"work\s+history",
+        r"internship\s+experience", r"internships",
     ),
-    "education": re.compile(
-        r"(?i)^(education|academic\s+background|academics|educational\s+qualification"
-        r"s|qualifications)\s*[:]?\s*$"
+    "education": (
+        r"education", r"academic\s+background", r"academic\s+qualification",
+        r"academic\s+qualifications", r"educational\s+background",
+        r"educational\s+qualifications", r"academics", r"qualifications",
+        r"schooling",
     ),
-    "projects": re.compile(
-        r"(?i)^(projects|personal\s+projects|academic\s+projects|project\s+experience"
-        r"|side\s+projects)\s*[:]?\s*$"
+    "projects": (
+        r"projects", r"personal\s+projects", r"academic\s+projects",
+        r"key\s+projects", r"major\s+projects", r"notable\s+projects",
+        r"featured\s+projects", r"capstone\s+projects",
+        r"project\s+experience", r"side\s+projects", r"personal\s+work",
+        r"academic\s+work", r"development\s+projects", r"practical\s+projects",
     ),
-    "certifications": re.compile(
-        r"(?i)^(certifications|certificates|certification|licenses|licenses\s+&"
-        r"\s+certifications|courses)\s*[:]?\s*$"
+    "certifications": (
+        r"certifications", r"certificates", r"certification", r"licenses",
+        r"licenses\s*&\s+certifications", r"courses",
+        r"courses\s*&\s+certifications", r"professional\s+certifications",
+        r"certificates\s*&\s+licenses", r"training\s*&\s+certifications",
     ),
-    "contact": re.compile(r"(?i)^(contact|contact\s+information|links)\s*[:]?\s*$"),
-    "languages": re.compile(r"(?i)^(languages)\s*[:]?\s*$"),
+    "contact": (r"contact", r"contact\s+information", r"links"),
+    "languages": (r"languages",),
+}
+
+# Trailing separator decoration commonly follows a heading, e.g. "SKILLS ----".
+_HEADER_TRAIL_RE = r"[:.]?[\s\-•_|~]*"
+
+
+def _header_regex(terms: tuple) -> re.Pattern:
+    inner = "|".join(terms)
+    return re.compile(r"(?i)^(" + inner + r")\s*" + _HEADER_TRAIL_RE + r"$")
+
+
+def _inline_header_regex(terms: tuple) -> re.Pattern:
+    inner = "|".join(terms)
+    return re.compile(r"(?i)^(" + inner + r")\s*[:.]\s*(\S.*)$")
+
+
+_SECTION_PATTERNS = {name: _header_regex(terms) for name, terms in _SECTION_TERMS.items()}
+_INLINE_HEADER_PATTERNS = {
+    name: _inline_header_regex(terms) for name, terms in _SECTION_TERMS.items()
 }
 
 # Section headers must appear as a standalone-ish line (short, mostly letters).
-_HEADER_MAX_LEN = 45
+_HEADER_MAX_LEN = 48
 
 
 @dataclass
@@ -372,6 +407,13 @@ def _split_into_sections(lines: List[str]) -> Dict[str, List[str]]:
             flush()
             current = header
             continue
+        # Condensed/two-column layouts sometimes use "Skills: Python, FastAPI".
+        inline = _match_inline_section_header(stripped)
+        if inline is not None:
+            flush()
+            current = inline[0]
+            buffer.append(inline[1])
+            continue
         buffer.append(line)
 
     flush()
@@ -384,6 +426,22 @@ def _match_section_header(line: str) -> Optional[str]:
     for name, pattern in _SECTION_PATTERNS.items():
         if pattern.fullmatch(line):
             return name
+    return None
+
+
+def _match_inline_section_header(line: str) -> Optional[tuple[str, str]]:
+    """Detect a heading used inline, e.g. `Skills: Python, FastAPI`.
+
+    Returns (section_name, content) when the line begins with a known heading
+    followed by a colon/dot and real content. Used to support condensed and
+    two-column layouts where the heading shares a line with its content.
+    """
+    if not line or len(line) > 120:
+        return None
+    for name, pattern in _INLINE_HEADER_PATTERNS.items():
+        match = pattern.match(line)
+        if match:
+            return name, match.group(2).strip()
     return None
 
 
@@ -775,7 +833,8 @@ def _strip_dates(text: str) -> str:
     return _DATE_TOKEN_RE.sub(" ", text)
 
 
-def _split_experience_chunks(lines: List[str]) -> List[List[str]]:
+def _split_on_blank_lines(lines: List[str]) -> List[List[str]]:
+    """Split lines into chunks separated by blank/empty lines."""
     chunks: List[List[str]] = []
     current: List[str] = []
     for line in lines:
@@ -787,6 +846,11 @@ def _split_experience_chunks(lines: List[str]) -> List[List[str]]:
             current.append(line)
     if current:
         chunks.append(current)
+    return chunks
+
+
+def _split_experience_chunks(lines: List[str]) -> List[List[str]]:
+    chunks = _split_on_blank_lines(lines)
 
     if len(chunks) > 1:
         return chunks
@@ -808,6 +872,71 @@ def _split_experience_chunks(lines: List[str]) -> List[List[str]]:
             and any(re.match(r"^[-•*]\s", c.strip()) for c in current)
         )
         if starts_header:
+            new_chunks.append(current)
+            current = [line]
+        else:
+            current.append(line)
+    if current:
+        new_chunks.append(current)
+    return new_chunks if new_chunks else [combined]
+
+
+# Words that remain lowercase in an otherwise Title Case heading.
+_PROJECT_TITLE_FUNCTION_WORDS = {
+    "a", "an", "the", "of", "in", "on", "at", "to", "for", "and", "or",
+    "with", "from", "via", "by", "over", "under",
+}
+
+
+def _looks_like_title_line(line: str) -> bool:
+    """Whether a non-blank line is a heading for a new project entry.
+
+    A project title is a short line written in Title Case that is not a
+    bullet, not a technology-only list, and not an experience header.
+    """
+    s = line.strip().lstrip("-•* ").strip()
+    if not s or len(s) > 70:
+        return False
+    if re.match(r"^[-•*]\s", line.strip()):
+        return False
+    if _find_role(s) or _DATE_TOKEN_RE.search(s) or _looks_like_role(s):
+        return False
+    if _is_tech_only_line(s):
+        return False
+    # Description lines usually end with sentence punctuation.
+    if s.endswith((".", ",", ";", ":")):
+        return False
+    words = s.split()
+    if not (2 <= len(words) <= 12):
+        return False
+    for w in words:
+        if re.fullmatch(r"[A-Z0-9][A-Za-z0-9_+./&'-]*", w):
+            continue
+        if w.lower() in _PROJECT_TITLE_FUNCTION_WORDS:
+            continue
+        return False
+    return True
+
+
+def _split_project_chunks(lines: List[str]) -> List[List[str]]:
+    """Split a projects section into per-project entries.
+
+    Uses blank-line grouping first, then falls back to Title Case headings
+    for condensed/layout-shifted PDFs where blank lines were lost during
+    text extraction.
+    """
+    chunks = _split_on_blank_lines(lines)
+    if len(chunks) > 1:
+        return chunks
+
+    combined = [l for l in lines if l.strip()]
+    if len(combined) <= 1:
+        return [combined] if combined else []
+
+    new_chunks: List[List[str]] = []
+    current: List[str] = []
+    for line in combined:
+        if _looks_like_title_line(line) and current:
             new_chunks.append(current)
             current = [line]
         else:
@@ -895,7 +1024,7 @@ def _looks_like_role(text: str) -> bool:
 def _extract_projects(lines: List[str]) -> List[Dict[str, Any]]:
     if not lines:
         return []
-    chunks = _split_experience_chunks(lines)
+    chunks = _split_project_chunks(lines)
     if not chunks:
         return []
 

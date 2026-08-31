@@ -145,6 +145,13 @@ export default function ResumesPage() {
     );
   }
 
+  // /resumes/{id}/parsed returns data nested under `data`; normalise once here
+  // so the insights modal reads the actual backend contract.
+  const insightsParsed =
+    insights && !Array.isArray(insights) && insights.data && typeof insights.data === "object"
+      ? insights.data
+      : insights || {};
+
   return (
     <div className="page resumes-page">
       {/* Toast Notification */}
@@ -221,9 +228,34 @@ export default function ResumesPage() {
           <div className="resumes-grid">
             {resumes.map((r) => {
               const isParsed = r.parsing_status === "completed";
-              const skillsCount = r.parsed_data?.skills?.length || 0;
-              const expCount = r.parsed_data?.experience?.length || 0;
-              const projCount = r.parsed_data?.projects?.length || 0;
+              const parsed = r.parsed_data || {};
+              const skillsCount = Array.isArray(parsed.skills) ? parsed.skills.length : 0;
+              const expCount = Array.isArray(parsed.experience) ? parsed.experience.length : 0;
+              const projCount = Array.isArray(parsed.projects) ? parsed.projects.length : 0;
+              const eduCount = Array.isArray(parsed.education) ? parsed.education.length : 0;
+              const totalExtracted = skillsCount + expCount + projCount + eduCount;
+
+              let statusTone = "neutral";
+              let statusLabel = r.parsing_status || "Processing";
+              if (isParsed) {
+                const parseErr = r.parsing_error || "";
+                if (/scanned|image/i.test(parseErr)) {
+                  statusTone = "warn";
+                  statusLabel = "This resume appears to be image-based or scanned.";
+                } else if (parseErr) {
+                  statusTone = "warn";
+                  statusLabel = "Limited information extracted";
+                } else if (totalExtracted === 0) {
+                  statusTone = "warn";
+                  statusLabel = "Limited information extracted";
+                } else {
+                  statusTone = "success";
+                  statusLabel = t("resume.parsedSuccess", "Parsed successfully");
+                }
+              } else if (r.parsing_status === "failed") {
+                statusTone = "warn";
+                statusLabel = "Parsing failed";
+              }
 
               return (
                 <div key={r.id} className="card resume-card-original">
@@ -237,12 +269,21 @@ export default function ResumesPage() {
                       <div className="resume-status-line">
                         <span className="badge-original">Original Resume</span>
                         {isParsed ? (
-                          <span className="parse-status success">
-                            <CheckCircle2 size={13} />
-                            <span>{t("resume.parsedSuccess", "Parsed successfully")}</span>
+                          <span className={`parse-status ${statusTone}`}>
+                            {statusTone === "success" ? (
+                              <CheckCircle2 size={13} />
+                            ) : (
+                              <AlertCircle size={13} />
+                            )}
+                            <span>{statusLabel}</span>
+                          </span>
+                        ) : r.parsing_status === "failed" ? (
+                          <span className="parse-status warn">
+                            <AlertCircle size={13} />
+                            <span>{statusLabel}</span>
                           </span>
                         ) : (
-                          <span className="parse-status neutral">{r.parsing_status || "Processing"}</span>
+                          <span className="parse-status neutral">{statusLabel}</span>
                         )}
                       </div>
 
@@ -377,29 +418,29 @@ export default function ResumesPage() {
               {/* Summary count tiles */}
               <div className="insights-tiles-grid">
                 <div className="insight-tile">
-                  <span className="tile-number font-mono">{insights.skills?.length || 0}</span>
+                  <span className="tile-number font-mono">{insightsParsed.skills?.length || 0}</span>
                   <span className="tile-label">{t("resume.skillsCount", "Skills")}</span>
                 </div>
                 <div className="insight-tile">
-                  <span className="tile-number font-mono">{insights.projects?.length || 0}</span>
+                  <span className="tile-number font-mono">{insightsParsed.projects?.length || 0}</span>
                   <span className="tile-label">{t("resume.projectsCount", "Projects")}</span>
                 </div>
                 <div className="insight-tile">
-                  <span className="tile-number font-mono">{insights.experience?.length || 0}</span>
+                  <span className="tile-number font-mono">{insightsParsed.experience?.length || 0}</span>
                   <span className="tile-label">{t("resume.expCount", "Experience")}</span>
                 </div>
                 <div className="insight-tile">
-                  <span className="tile-number font-mono">{insights.education?.length || 0}</span>
+                  <span className="tile-number font-mono">{insightsParsed.education?.length || 0}</span>
                   <span className="tile-label">{t("resume.eduCount", "Education")}</span>
                 </div>
               </div>
 
               {/* Skills section */}
-              {insights.skills?.length > 0 && (
+              {insightsParsed.skills?.length > 0 && (
                 <div className="insights-section">
                   <h4>Detected Technical Skills</h4>
                   <div className="skills-chips-wrap" style={{ marginTop: "var(--space-2)" }}>
-                    {insights.skills.map((s, i) => (
+                    {insightsParsed.skills.map((s, i) => (
                       <span key={i} className="skill-chip match">
                         {typeof s === "string" ? s : s.name}
                       </span>
@@ -409,17 +450,17 @@ export default function ResumesPage() {
               )}
 
               {/* Experience section */}
-              {insights.experience?.length > 0 && (
+              {insightsParsed.experience?.length > 0 && (
                 <div className="insights-section">
                   <h4>Work Experience</h4>
                   <div className="insights-exp-list">
-                    {insights.experience.map((exp, i) => (
+                    {insightsParsed.experience.map((exp, i) => (
                       <div key={i} className="insight-exp-item">
                         <div className="exp-title-row">
-                          <strong>{exp.title || exp.role || "Role"}</strong>
+                          <strong>{exp.title || exp.role || exp.job_title || "Role"}</strong>
                           {exp.company && <span className="text-secondary">· {exp.company}</span>}
                         </div>
-                        {exp.duration && <span className="text-xs text-muted">{exp.duration}</span>}
+                        {(exp.duration || exp.dates) && <span className="text-xs text-muted">{exp.duration || exp.dates}</span>}
                         {exp.description && <p className="text-sm text-secondary">{exp.description}</p>}
                       </div>
                     ))}
@@ -427,14 +468,37 @@ export default function ResumesPage() {
                 </div>
               )}
 
+              {/* Education section */}
+              {insightsParsed.education?.length > 0 && (
+                <div className="insights-section">
+                  <h4>Education</h4>
+                  <div className="insights-exp-list">
+                    {insightsParsed.education.map((edu, i) => (
+                      <div key={i} className="insight-exp-item">
+                        <div className="exp-title-row">
+                          <strong>{edu.degree || "Qualification"}</strong>
+                          {edu.institution && <span className="text-secondary">· {edu.institution}</span>}
+                        </div>
+                        {(edu.graduation_year || edu.field_of_study) && (
+                          <span className="text-xs text-muted">
+                            {[edu.graduation_year, edu.field_of_study].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Projects section */}
-              {insights.projects?.length > 0 && (
+              {insightsParsed.projects?.length > 0 && (
                 <div className="insights-section">
                   <h4>Projects</h4>
                   <div className="insights-proj-list">
-                    {insights.projects.map((p, i) => (
+                    {insightsParsed.projects.map((p, i) => (
                       <div key={i} className="insight-proj-item">
                         <strong>{p.name || p.title || "Project"}</strong>
+                        {p.technologies && <span className="text-xs text-muted">{Array.isArray(p.technologies) ? p.technologies.join(", ") : p.technologies}</span>}
                         {p.description && <p className="text-sm text-secondary">{p.description}</p>}
                       </div>
                     ))}

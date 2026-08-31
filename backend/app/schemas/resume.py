@@ -13,6 +13,7 @@ class ResumeResponse(BaseModel):
     parsing_status: str
     parsing_error: str | None
     parsed_at: datetime | None
+    parsed_data: dict | None = None
     created_at: datetime
     updated_at: datetime
 
