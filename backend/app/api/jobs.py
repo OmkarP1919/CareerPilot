@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+import logging
 from app.database.base import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -15,6 +16,8 @@ from app.schemas.job import (
 )
 from app.services.job_discovery import discover_jobs, get_recommended_jobs
 from app.services.personalized_discovery import PersonalizedDiscoveryService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -76,18 +79,16 @@ def trigger_personalized_discovery(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    print(f"[BACKEND 1] Personalized endpoint entered for user_id={user.id}")
     try:
-        print("[BACKEND 2] Calling personalized discovery service")
         result = PersonalizedDiscoveryService.discover(user.id, db)
-        print(f"[BACKEND 3] Discovery service returned: new={result.get('new_jobs')}, existing={result.get('existing_jobs')}, matches={result.get('matches_created')}")
-        print("[BACKEND 4] Sending response")
         return PersonalizedDiscoveryResponse(**result)
-    except Exception as e:
-        import traceback
-        print(f"[BACKEND ERROR] Discovery endpoint exception: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Personalized discovery failed for user %s", user.id)
+        # Do not leak raw exception details to the client.
+        raise HTTPException(
+            status_code=500,
+            detail="We couldn't finish finding jobs right now. Please try again.",
+        )
 
 
 

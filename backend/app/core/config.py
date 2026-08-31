@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     ADZUNA_APP_ID: str = ""
     ADZUNA_APP_KEY: str = ""
     ADZUNA_COUNTRY: str = "us"
+    ADZUNA_TIMEOUT_SECONDS: float = 20.0
+    JOBICY_TIMEOUT_SECONDS: float = 20.0
 
     # AI resume tailoring (Phase 3A). Optional - the application must fail
     # gracefully when these are not configured.

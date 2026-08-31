@@ -2,16 +2,45 @@ import { auth } from "../firebase";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
+const DEFAULT_TIMEOUT_MS = 120_000;
+const DISCOVERY_TIMEOUT_MS = 90_000;
+
+const GENERIC_SERVER_MESSAGE = "Something went wrong. Please try again.";
+
+export class ApiError extends Error {
+  constructor(kind, message, status = null) {
+    super(message);
+    this.name = "ApiError";
+    this.kind = kind; // "timeout" | "auth" | "forbidden" | "server" | "network" | "http"
+    this.status = status;
+  }
+}
+
+function sanitizeDetail(detail) {
+  if (typeof detail !== "string" || !detail.trim()) return null;
+  if (detail.includes("Traceback") || detail.includes("\n")) return null;
+  return detail.trim();
+}
+
 async function getToken() {
   const user = auth.currentUser;
   if (!user) return null;
   return user.getIdToken();
 }
 
-async function request(endpoint, options = {}) {
+async function request(endpoint, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const fullUrl = `${API_BASE_URL}${endpoint}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const token = await getToken();
+    let token;
+    try {
+      token = await getToken();
+    } catch {
+      throw new ApiError("network", "Unable to reach the authentication service. Please try again.");
+    }
+
     const headers = {
       ...options.headers,
     };
@@ -24,26 +53,43 @@ async function request(endpoint, options = {}) {
       headers["Content-Type"] = "application/json";
     }
 
-    console.log("[API 4] Fetch starting", fullUrl, options.method || "GET");
     const response = await fetch(fullUrl, {
       ...options,
       headers,
+      signal: controller.signal,
     });
-    console.log("[API 5] Fetch response received", response.status, response.statusText);
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: "Request failed" }));
-      console.error("[API Error Response]", response.status, error);
-      throw new Error(error.detail || `API error: ${response.status}`);
+      const error = await response.json().catch(() => ({}));
+      const detail = sanitizeDetail(error.detail);
+
+      if (response.status === 401) {
+        throw new ApiError("auth", detail || "Your session has expired. Please sign in again.", 401);
+      }
+      if (response.status === 403) {
+        throw new ApiError("forbidden", detail || "You don't have permission to do that.", 403);
+      }
+      if (response.status === 408 || response.status === 504) {
+        throw new ApiError("timeout", detail || "The request timed out. Please try again.", response.status);
+      }
+      if (response.status >= 500) {
+        throw new ApiError("server", detail || GENERIC_SERVER_MESSAGE, response.status);
+      }
+      throw new ApiError("http", detail || `Request failed (${response.status}).`, response.status);
     }
 
-    console.log("[API 6] Parsing response");
-    const data = await response.json();
-    console.log("[API 7] Parsed response", data);
-    return data;
+    return await response.json();
   } catch (err) {
-    console.error("[API Request Exception]", fullUrl, err);
-    throw err;
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    if (err && err.name === "AbortError") {
+      throw new ApiError("timeout", "The request timed out. Please try again.");
+    }
+    // Network-level failures (offline, DNS, refused, CORS, etc.) surface as TypeError.
+    throw new ApiError("network", "Network error. Please check your connection and try again.");
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -54,12 +100,11 @@ export const api = {
     return request(endpoint, { method: "GET" });
   },
 
-  post(endpoint, data = {}) {
-    console.log("[API 3] post() entered", endpoint);
+  post(endpoint, data = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
     return request(endpoint, {
       method: "POST",
       body: JSON.stringify(data),
-    });
+    }, timeoutMs);
   },
 
   put(endpoint, data = {}) {
@@ -74,9 +119,7 @@ export const api = {
   },
 
   discoverPersonalizedJobs() {
-    console.log("[API 1] discoverPersonalizedJobs entered");
-    console.log("[API 2] Calling POST");
-    return this.post("/jobs/discover/personalized", {});
+    return this.post("/jobs/discover/personalized", {}, DISCOVERY_TIMEOUT_MS);
   },
 
   analyzeResume(jobId, resumeId) {

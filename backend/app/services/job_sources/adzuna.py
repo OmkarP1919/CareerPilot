@@ -1,14 +1,19 @@
+import json
 import logging
 import httpx
 from datetime import datetime, timezone
-from app.services.job_sources.base import BaseJobSource, NormalizedJob
+from app.services.job_sources.base import (
+    BaseJobSource,
+    NormalizedJob,
+    SourceUnavailableError,
+    describe_status,
+)
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 ADZUNA_BASE_URL = "https://api.adzuna.com/v1/api/jobs"
 RESULTS_PER_PAGE = 10
-REQUEST_TIMEOUT = 5
 
 
 ADZUNA_SUPPORTED_COUNTRIES = {
@@ -29,6 +34,7 @@ class AdzunaSource(BaseJobSource):
         settings = get_settings()
         app_id = settings.ADZUNA_APP_ID
         app_key = settings.ADZUNA_APP_KEY
+        timeout = settings.ADZUNA_TIMEOUT_SECONDS
         target_country = (country or settings.ADZUNA_COUNTRY or "us").lower()
         if target_country not in ADZUNA_SUPPORTED_COUNTRIES:
             target_country = settings.ADZUNA_COUNTRY or "us"
@@ -38,31 +44,47 @@ class AdzunaSource(BaseJobSource):
             return []
 
         jobs: list[NormalizedJob] = []
+        source_errors: list[str] = []
         primary_location = locations[0] if locations else None
 
         for query in queries[:2]:
             try:
-                fetched = self._search(app_id, app_key, target_country, query, primary_location)
+                fetched = self._search(app_id, app_key, target_country, query, primary_location, timeout)
                 jobs.extend(fetched)
             except httpx.HTTPStatusError as e:
-                logger.warning(f"Adzuna search HTTP error {e.response.status_code} for country='{target_country}', query='{query}'")
+                source_errors.append(describe_status(e.response.status_code))
+                logger.warning(
+                    "Adzuna HTTP error %s for country='%s', query='%s'",
+                    e.response.status_code, target_country, query,
+                )
                 if target_country != "us":
                     target_country = "us"
                     try:
-                        fetched = self._search(app_id, app_key, "us", query, None)
+                        fetched = self._search(app_id, app_key, "us", query, None, timeout)
                         jobs.extend(fetched)
                     except Exception:
-                        break
+                        logger.warning("Adzuna US fallback failed for query='%s'", query)
                 else:
-                    break
-            except Exception:
-                logger.exception(f"Adzuna search failed for query='{query}' in country='{target_country}'")
-                break
+                    logger.warning("Adzuna search failed for query='%s' in country='%s'", query, target_country)
+            except (httpx.TimeoutException, httpx.TransportError) as e:
+                source_errors.append("timed out")
+                logger.warning(
+                    "Adzuna request failed for query='%s' in country='%s': %s",
+                    query, target_country, type(e).__name__,
+                )
+            except Exception as e:
+                source_errors.append("unexpected error")
+                logger.exception("Adzuna search failed for query='%s' in country='%s'", query, target_country)
+
+        if not jobs and source_errors:
+            raise SourceUnavailableError(
+                f"Adzuna was temporarily unavailable ({'; '.join(dict.fromkeys(source_errors))})."
+            )
 
         return jobs
 
     def _search(
-        self, app_id: str, app_key: str, country: str, what: str, where: str | None
+        self, app_id: str, app_key: str, country: str, what: str, where: str | None, timeout: float
     ) -> list[NormalizedJob]:
         url = f"{ADZUNA_BASE_URL}/{country}/search/1"
         params = {
@@ -75,9 +97,13 @@ class AdzunaSource(BaseJobSource):
         if where:
             params["where"] = where
 
-        response = httpx.get(url, params=params, timeout=REQUEST_TIMEOUT)
+        response = httpx.get(url, params=params, timeout=timeout)
         response.raise_for_status()
-        data = response.json()
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            logger.warning("Adzuna returned malformed JSON for query='%s'", what)
+            raise SourceUnavailableError("Adzuna returned an invalid response.")
 
         results = data.get("results", [])
         jobs = []

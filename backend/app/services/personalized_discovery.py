@@ -1,20 +1,26 @@
 import re
 import logging
+import time
+import uuid
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.profile import Profile, UserSkill, Project, Experience, Education
 from app.models.job import Job
 from app.models.job_match import JobMatch
-from app.services.matching import calculate_match
 from app.services.job_discovery import (
     normalize_title_company,
     _upsert_match,
 )
 from app.services.job_sources.adzuna import AdzunaSource
 from app.services.job_sources.jobicy import JobicySource
-from app.services.job_sources.base import NormalizedJob
+from app.services.job_sources.base import NormalizedJob, SourceUnavailableError
 
 logger = logging.getLogger(__name__)
+
+INCOMPLETE_PROFILE_MESSAGE = (
+    "Complete your profile to discover jobs matched to your skills and goals."
+)
+NO_PROFILE_MESSAGE = "Create a career profile to enable personalized job discovery."
 
 # Deterministic role signal mapping for skill & project tech sets
 ROLE_SIGNALS: dict[str, set[str]] = {
@@ -104,6 +110,17 @@ COUNTRY_MAP: dict[str, str] = {
 }
 
 GENERIC_TERMS = {"job", "jobs", "developer", "developers", "software", "engineer", "intern", "internship"}
+
+
+def _empty_result(errors: list[str]) -> dict:
+    return {
+        "queries_used": [],
+        "sources": {},
+        "new_jobs": 0,
+        "existing_jobs": 0,
+        "matches_created": 0,
+        "errors": errors,
+    }
 
 
 def resolve_country_and_location(
@@ -303,18 +320,14 @@ class PersonalizedDiscoveryService:
 
     @classmethod
     def discover(cls, user_id: str, db: Session) -> dict:
+        started = time.perf_counter()
+        logger.info("Personalized discovery started for user %s", user_id)
+
         profile = db.query(Profile).filter(Profile.user_id == user_id).first()
         if not profile:
-            return {
-                "queries_used": [],
-                "sources": {},
-                "new_jobs": 0,
-                "existing_jobs": 0,
-                "matches_created": 0,
-                "errors": ["No profile found. Please create a career profile first."],
-            }
+            logger.info("Personalized discovery aborted for user %s: no profile", user_id)
+            return _empty_result([NO_PROFILE_MESSAGE])
 
-        print("[SERVICE 1] PersonalizedDiscoveryService started")
         user_skills = [
             us.skill.name
             for us in db.query(UserSkill).filter(UserSkill.profile_id == profile.id).all()
@@ -322,32 +335,31 @@ class PersonalizedDiscoveryService:
         projects = db.query(Project).filter(Project.profile_id == profile.id).all()
         experiences = db.query(Experience).filter(Experience.profile_id == profile.id).all()
         education = db.query(Education).filter(Education.profile_id == profile.id).all()
-        print(f"[SERVICE 2] Profile loaded: {len(user_skills)} skills, {len(projects)} projects, {len(experiences)} exp, {len(education)} edu")
+        logger.info(
+            "Profile loaded for user %s: %d skills, %d projects, %d exp, %d edu",
+            user_id, len(user_skills), len(projects), len(experiences), len(education),
+        )
 
         # Build personalized queries
         queries = PersonalizedQueryBuilder.build_queries(
             profile, user_skills, projects, experiences, education
         )
-        print(f"[SERVICE 3] Queries generated: {queries}")
+        logger.info("Queries generated for user %s: %s", user_id, queries)
 
         if not queries:
-            print("[SERVICE 3.1] No queries generated, returning early")
-            return {
-                "queries_used": [],
-                "sources": {},
-                "new_jobs": 0,
-                "existing_jobs": 0,
-                "matches_created": 0,
-                "errors": [
-                    "Insufficient personalization data. Please add preferred roles or technical skills to your profile."
-                ],
-            }
+            logger.info(
+                "Personalized discovery aborted for user %s: insufficient profile data", user_id
+            )
+            return _empty_result([INCOMPLETE_PROFILE_MESSAGE])
 
         # Resolve location and country
         detected_country, location_terms = resolve_country_and_location(
             profile.location, profile.preferred_locations
         )
-        print(f"[SERVICE 3.2] Country detected: '{detected_country}', locations: {location_terms}")
+        logger.info(
+            "Country detected for user %s: '%s', locations: %s",
+            user_id, detected_country, location_terms,
+        )
 
         # Source orchestration with isolated exception handling
         adzuna = AdzunaSource()
@@ -358,33 +370,32 @@ class PersonalizedDiscoveryService:
         errors: list[str] = []
 
         # Fetch from Adzuna (top 2 queries)
-        print(f"[SERVICE 4] Before Adzuna fetch (queries={queries[:2]})", flush=True)
         try:
             adzuna_jobs = adzuna.fetch(queries[:2], location_terms, country=detected_country)
             sources_counts["Adzuna"] = len(adzuna_jobs)
             all_fetched.extend(adzuna_jobs)
-            print(f"[SERVICE 5] After Adzuna fetch, found: {len(adzuna_jobs)} jobs", flush=True)
-        except Exception as e:
-            msg = f"Adzuna search failed: {e}"
-            logger.exception(msg)
-            print(f"[SERVICE 5 ERROR] {msg}", flush=True)
-            errors.append(msg)
+            logger.info("Adzuna returned %d jobs for user %s", len(adzuna_jobs), user_id)
+        except SourceUnavailableError as e:
+            logger.warning("Adzuna unavailable for user %s: %s", user_id, e)
+            errors.append("Adzuna was temporarily unavailable.")
+        except Exception:
+            logger.exception("Adzuna search failed for user %s", user_id)
+            errors.append("Adzuna was temporarily unavailable.")
 
         # Fetch from Jobicy (top 2 queries)
-        print(f"[SERVICE 6] Before Jobicy fetch (queries={queries[:2]})", flush=True)
         try:
             jobicy_jobs = jobicy.fetch(queries[:2], location_terms)
             sources_counts["Jobicy"] = len(jobicy_jobs)
             all_fetched.extend(jobicy_jobs)
-            print(f"[SERVICE 7] After Jobicy fetch, found: {len(jobicy_jobs)} jobs", flush=True)
-        except Exception as e:
-            msg = f"Jobicy search failed: {e}"
-            logger.exception(msg)
-            print(f"[SERVICE 7 ERROR] {msg}", flush=True)
-            errors.append(msg)
+            logger.info("Jobicy returned %d jobs for user %s", len(jobicy_jobs), user_id)
+        except SourceUnavailableError as e:
+            logger.warning("Jobicy unavailable for user %s: %s", user_id, e)
+            errors.append("Jobicy was temporarily unavailable.")
+        except Exception:
+            logger.exception("Jobicy search failed for user %s", user_id)
+            errors.append("Jobicy was temporarily unavailable.")
 
         # Global Deduplication & Global Job Upsert
-        print(f"[SERVICE 8] Before deduplication & DB commit (total fetched={len(all_fetched)})", flush=True)
         new_jobs = 0
         existing_jobs = 0
         matches_created = 0
@@ -408,36 +419,82 @@ class PersonalizedDiscoveryService:
             existing_title_company[key] = j
 
         for fetched in all_fetched:
-            if not fetched.title.strip() or not fetched.company.strip():
-                continue
+            try:
+                if not fetched.title.strip() or not fetched.company.strip():
+                    continue
 
-            existing_job = None
+                existing_job = None
 
-            if fetched.external_id and fetched.source:
-                composite_key = (fetched.external_id, fetched.source)
-                existing_job = existing_external.get(composite_key)
+                if fetched.external_id and fetched.source:
+                    composite_key = (fetched.external_id, fetched.source)
+                    existing_job = existing_external.get(composite_key)
 
-            if not existing_job:
-                tc_key = normalize_title_company(fetched.title, fetched.company)
-                existing_job = existing_title_company.get(tc_key)
+                if not existing_job:
+                    tc_key = normalize_title_company(fetched.title, fetched.company)
+                    existing_job = existing_title_company.get(tc_key)
 
-            if existing_job:
-                if fetched.description and not existing_job.description:
-                    existing_job.description = fetched.description
-                if fetched.application_url and not existing_job.application_url:
-                    existing_job.application_url = fetched.application_url
-                if fetched.posted_at and not existing_job.posted_at:
+                if existing_job:
+                    if fetched.description and not existing_job.description:
+                        existing_job.description = fetched.description
+                    if fetched.application_url and not existing_job.application_url:
+                        existing_job.application_url = fetched.application_url
+                    if fetched.posted_at and not existing_job.posted_at:
+                        try:
+                            existing_job.posted_at = datetime.fromisoformat(
+                                fetched.posted_at.replace("Z", "+00:00")
+                            )
+                        except (ValueError, TypeError):
+                            pass
+                    existing_jobs += 1
+                    created = _upsert_match(
+                        user_id,
+                        existing_job,
+                        db,
+                        existing_matches=existing_matches,
+                        profile=profile,
+                        user_skills_set=user_skills_set,
+                        user_projects=projects,
+                        user_experiences=experiences,
+                    )
+                    if created:
+                        matches_created += 1
+                    continue
+
+                job_uuid = str(uuid.uuid4())
+                new_job = Job(
+                    id=job_uuid,
+                    user_id=user_id,
+                    external_id=fetched.external_id,
+                    title=fetched.title.strip(),
+                    company=fetched.company.strip(),
+                    location=fetched.location,
+                    employment_type=fetched.employment_type,
+                    experience_level=fetched.experience_level,
+                    description=fetched.description,
+                    application_url=fetched.application_url,
+                    source=fetched.source,
+                    fetched_at=now,
+                )
+
+                if fetched.posted_at:
                     try:
-                        existing_job.posted_at = datetime.fromisoformat(
+                        new_job.posted_at = datetime.fromisoformat(
                             fetched.posted_at.replace("Z", "+00:00")
                         )
                     except (ValueError, TypeError):
                         pass
-                existing_jobs += 1
-                # Ensure the requesting user gets a JobMatch calculated against their profile
-                _upsert_match(
+
+                db.add(new_job)
+
+                tc_key = normalize_title_company(new_job.title, new_job.company)
+                existing_title_company[tc_key] = new_job
+                if new_job.external_id and new_job.source:
+                    existing_external[(new_job.external_id, new_job.source)] = new_job
+
+                new_jobs += 1
+                created = _upsert_match(
                     user_id,
-                    existing_job,
+                    new_job,
                     db,
                     existing_matches=existing_matches,
                     profile=profile,
@@ -445,59 +502,21 @@ class PersonalizedDiscoveryService:
                     user_projects=projects,
                     user_experiences=experiences,
                 )
-                matches_created += 1
-                continue
-
-            import uuid
-            job_uuid = str(uuid.uuid4())
-            new_job = Job(
-                id=job_uuid,
-                user_id=user_id,
-                external_id=fetched.external_id,
-                title=fetched.title.strip(),
-                company=fetched.company.strip(),
-                location=fetched.location,
-                employment_type=fetched.employment_type,
-                experience_level=fetched.experience_level,
-                description=fetched.description,
-                application_url=fetched.application_url,
-                source=fetched.source,
-                fetched_at=now,
-            )
-
-            if fetched.posted_at:
-                try:
-                    new_job.posted_at = datetime.fromisoformat(
-                        fetched.posted_at.replace("Z", "+00:00")
-                    )
-                except (ValueError, TypeError):
-                    pass
-
-            db.add(new_job)
-
-            tc_key = normalize_title_company(new_job.title, new_job.company)
-            existing_title_company[tc_key] = new_job
-            if new_job.external_id and new_job.source:
-                existing_external[(new_job.external_id, new_job.source)] = new_job
-
-            new_jobs += 1
-            # Run existing 5-factor matching for the requesting user on new job
-            _upsert_match(
-                user_id,
-                new_job,
-                db,
-                existing_matches=existing_matches,
-                profile=profile,
-                user_skills_set=user_skills_set,
-                user_projects=projects,
-                user_experiences=experiences,
-            )
-            matches_created += 1
+                if created:
+                    matches_created += 1
+            except Exception:
+                # A single malformed record must not abort the whole discovery run.
+                logger.exception("Failed to process a discovered job for user %s", user_id)
 
         db.commit()
-        print(f"[SERVICE 9] After DB commit: new_jobs={new_jobs}, existing_jobs={existing_jobs}, matches_created={matches_created}", flush=True)
 
-        result_payload = {
+        duration = round(time.perf_counter() - started, 2)
+        logger.info(
+            "Discovery completed for user %s in %ss: new=%d existing=%d matches=%d source_errors=%d",
+            user_id, duration, new_jobs, existing_jobs, matches_created, len(errors),
+        )
+
+        return {
             "queries_used": queries,
             "sources": sources_counts,
             "new_jobs": new_jobs,
@@ -505,5 +524,3 @@ class PersonalizedDiscoveryService:
             "matches_created": matches_created,
             "errors": errors,
         }
-        print("[SERVICE 10] Returning result payload", flush=True)
-        return result_payload

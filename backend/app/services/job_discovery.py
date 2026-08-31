@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.user import User
-from app.models.profile import Profile, UserSkill
+from app.models.profile import Profile, UserSkill, Project, Experience
 from app.models.job import Job
 from app.models.job_match import JobMatch
 from app.services.matching import calculate_match
@@ -62,6 +62,12 @@ def _upsert_match(
     user_projects: list[Project] | None = None,
     user_experiences: list[Experience] | None = None,
 ) -> bool:
+    """Calculates and persists a JobMatch for (user_id, job).
+
+    Returns True only when a NEW JobMatch row was created. Returns False when
+    an existing match was left unchanged or updated, enabling idempotent
+    match counting across repeated discovery runs.
+    """
     result = calculate_match(
         user_id, job, db,
         profile=profile,
@@ -82,7 +88,7 @@ def _upsert_match(
             and existing_match.skills_score == result["skills_score"]
             and existing_match.role_score == result["role_score"]
         ):
-            return True
+            return False
         existing_match.overall_score = result["overall_score"]
         existing_match.skills_score = result["skills_score"]
         existing_match.project_score = result["project_score"]
@@ -94,6 +100,7 @@ def _upsert_match(
         existing_match.relevant_projects = json.dumps(result["relevant_projects"])
         existing_match.relevant_experience = json.dumps(result["relevant_experience"])
         existing_match.explanation = result["explanation"]
+        return False
     else:
         match = JobMatch(
             user_id=user_id,

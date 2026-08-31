@@ -19,6 +19,7 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from "lucide-react";
 
 const EMPLOYMENT_TYPES = ["Full-time", "Part-time", "Contract", "Internship", "Freelance"];
@@ -103,26 +104,136 @@ export default function JobsPage() {
     fetchJobs();
   }, [fetchJobs]);
 
+  const hasSourceErrors = (errors) =>
+    Array.isArray(errors) &&
+    errors.some((e) => typeof e === "string" && /unavailable|source/i.test(e));
+
+  const isIncompleteProfile = (errors) =>
+    Array.isArray(errors) &&
+    errors.some((e) => typeof e === "string" && /complete your profile|career profile/i.test(e));
+
+  const normalizeDiscoveryResult = (res) => {
+    if (!res || typeof res !== "object" || Array.isArray(res)) {
+      return {
+        type: "error",
+        message: "We couldn't find jobs right now.",
+        queries: [],
+        retryable: true,
+        refresh: false,
+      };
+    }
+
+    const newJobs = Number.isFinite(res.new_jobs) ? res.new_jobs : 0;
+    const existingJobs = Number.isFinite(res.existing_jobs) ? res.existing_jobs : 0;
+    const queries = Array.isArray(res.queries_used) ? res.queries_used : [];
+    const errors = Array.isArray(res.errors) ? res.errors : [];
+    const partial = hasSourceErrors(errors);
+
+    if (isIncompleteProfile(errors)) {
+      return {
+        type: "incomplete",
+        message: "Complete your profile for personalized job discovery.",
+        queries: [],
+        retryable: false,
+        refresh: false,
+      };
+    }
+
+    const hint = partial ? "Some job sources were temporarily unavailable." : null;
+
+    if (newJobs > 0) {
+      return {
+        type: "success",
+        message: `${newJobs} new ${newJobs === 1 ? "opportunity" : "opportunities"} found for you.`,
+        hint,
+        queries,
+        retryable: false,
+        refresh: true,
+      };
+    }
+
+    if (existingJobs > 0) {
+      return {
+        type: "success",
+        message: "Your personalized matches are up to date.",
+        hint,
+        queries,
+        retryable: false,
+        refresh: true,
+      };
+    }
+
+    if (errors.length > 0) {
+      return {
+        type: "error",
+        message: "We couldn't find jobs right now.",
+        queries,
+        retryable: true,
+        refresh: false,
+      };
+    }
+
+    return {
+      type: "empty",
+      message: "No new matching opportunities right now.",
+      queries,
+      retryable: true,
+      refresh: false,
+    };
+  };
+
+  const mapDiscoveryError = (err) => {
+    const kind = err?.kind;
+    if (kind === "timeout") {
+      return {
+        type: "error",
+        message: "Job discovery is taking longer than expected. Please try again.",
+        queries: [],
+        retryable: true,
+      };
+    }
+    if (kind === "auth") {
+      return {
+        type: "error",
+        message: "Your session has expired. Please sign in again.",
+        queries: [],
+        retryable: false,
+      };
+    }
+    if (kind === "network") {
+      return {
+        type: "error",
+        message: "We couldn't reach the server. Please try again.",
+        queries: [],
+        retryable: true,
+      };
+    }
+    return {
+      type: "error",
+      message: "We couldn't find jobs right now.",
+      queries: [],
+      retryable: true,
+    };
+  };
+
   const handlePersonalizedDiscovery = async () => {
     if (discovering) return;
     setDiscovering(true);
     setDiscoveryResult(null);
+    setShowSearchTerms(false);
 
     try {
       const res = await api.discoverPersonalizedJobs();
-      const count = res?.added_count ?? 0;
-      const queries = res?.queries_used || [];
+      const result = normalizeDiscoveryResult(res);
+      setDiscoveryResult(result);
 
-      setDiscoveryResult({
-        count,
-        queries,
-        message: count > 0 ? `${count} new opportunities found` : "Your recommendations are up to date.",
-      });
-
-      await fetchJobs();
-      setActiveTab("recommended");
+      if (result.refresh) {
+        await fetchJobs();
+        setActiveTab("recommended");
+      }
     } catch (err) {
-      notify("We couldn't fetch new recommendations right now. Please try again.", "error");
+      console.error("[Discovery Error]", err);
+      setDiscoveryResult(mapDiscoveryError(err));
     } finally {
       setDiscovering(false);
     }
@@ -250,20 +361,55 @@ export default function JobsPage() {
 
         {/* Discovery feedback banner */}
         {discoveryResult && (
-          <div className="discovery-feedback-banner" role="status">
+          <div
+            className={`discovery-feedback-banner banner-${discoveryResult.type}`}
+            role={discoveryResult.type === "error" ? "alert" : "status"}
+          >
             <div className="feedback-content">
-              <Sparkles size={16} className="text-accent" />
-              <span className="feedback-text">{discoveryResult.message}</span>
+              <span className="feedback-icon">
+                {discoveryResult.type === "error" ? (
+                  <AlertTriangle size={16} />
+                ) : (
+                  <Sparkles size={16} />
+                )}
+              </span>
+              <div className="feedback-texts">
+                <span className="feedback-text">{discoveryResult.message}</span>
+                {discoveryResult.hint && (
+                  <span className="feedback-hint">{discoveryResult.hint}</span>
+                )}
+              </div>
             </div>
-            {discoveryResult.queries && discoveryResult.queries.length > 0 && (
-              <button
-                type="button"
-                className="feedback-toggle-btn"
-                onClick={() => setShowSearchTerms((p) => !p)}
-              >
-                <span>{t("jobs.seeHowSearched", "See how we searched")}</span>
-                {showSearchTerms ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </button>
+
+            {(discoveryResult.retryable || discoveryResult.queries?.length > 0 || discoveryResult.type === "incomplete") && (
+              <div className="feedback-actions">
+                {discoveryResult.retryable && !discovering && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={handlePersonalizedDiscovery}
+                  >
+                    <RefreshCw size={14} />
+                    <span>Try Again</span>
+                  </button>
+                )}
+                {discoveryResult.type === "incomplete" && (
+                  <Link to="/profile" className="btn btn-primary btn-sm">
+                    <span>Complete Profile</span>
+                    <ArrowRight size={14} />
+                  </Link>
+                )}
+                {discoveryResult.queries?.length > 0 && (
+                  <button
+                    type="button"
+                    className="feedback-toggle-btn"
+                    onClick={() => setShowSearchTerms((p) => !p)}
+                  >
+                    <span>{t("jobs.seeHowSearched", "See how we searched")}</span>
+                    {showSearchTerms ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

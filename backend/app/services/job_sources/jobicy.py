@@ -1,12 +1,18 @@
+import json
 import logging
 import re
 import httpx
-from app.services.job_sources.base import BaseJobSource, NormalizedJob
+from app.services.job_sources.base import (
+    BaseJobSource,
+    NormalizedJob,
+    SourceUnavailableError,
+    describe_status,
+)
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 JOBICY_BASE_URL = "https://jobicy.com/api/v2/remote-jobs"
-REQUEST_TIMEOUT = 5
 MAX_PER_QUERY = 15
 
 
@@ -21,26 +27,47 @@ class JobicySource(BaseJobSource):
     name = "Jobicy"
 
     def fetch(self, queries: list[str], locations: list[str] | None = None) -> list[NormalizedJob]:
+        timeout = get_settings().JOBICY_TIMEOUT_SECONDS
         jobs: list[NormalizedJob] = []
+        source_errors: list[str] = []
 
         for query in queries[:2]:
             try:
-                fetched = self._search(query)
+                fetched = self._search(query, timeout)
                 jobs.extend(fetched)
+            except (httpx.TimeoutException, httpx.TransportError):
+                source_errors.append("timed out")
+                logger.warning("Jobicy request failed for query='%s': %s", query, "transport error")
+            except httpx.HTTPStatusError as e:
+                source_errors.append(describe_status(e.response.status_code))
+                logger.warning("Jobicy HTTP error %s for query='%s'", e.response.status_code, query)
+            except SourceUnavailableError:
+                source_errors.append("invalid response")
+                logger.warning("Jobicy returned an invalid response for query='%s'", query)
             except Exception:
-                logger.exception(f"Jobicy search failed for query='{query}'")
+                source_errors.append("unexpected error")
+                logger.exception("Jobicy search failed for query='%s'", query)
+
+        if not jobs and source_errors:
+            raise SourceUnavailableError(
+                f"Jobicy was temporarily unavailable ({'; '.join(dict.fromkeys(source_errors))})."
+            )
 
         return jobs
 
-    def _search(self, tag: str) -> list[NormalizedJob]:
+    def _search(self, tag: str, timeout: float) -> list[NormalizedJob]:
         params = {
             "count": MAX_PER_QUERY,
             "tag": tag[:50],
         }
 
-        response = httpx.get(JOBICY_BASE_URL, params=params, timeout=REQUEST_TIMEOUT)
+        response = httpx.get(JOBICY_BASE_URL, params=params, timeout=timeout)
         response.raise_for_status()
-        data = response.json()
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            logger.warning("Jobicy returned malformed JSON for query='%s'", tag)
+            raise SourceUnavailableError("Jobicy returned an invalid response.")
 
         if not data.get("success"):
             return []

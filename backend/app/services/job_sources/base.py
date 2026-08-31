@@ -1,6 +1,28 @@
 from abc import ABC, abstractmethod
 
 
+class SourceUnavailableError(Exception):
+    """Raised when a job source could not be reached (timeout, HTTP error, etc.).
+
+    Carries a user-safe, non-sensitive message. Detailed reasons are logged
+    separately and must never be propagated to end users.
+    """
+
+    def __init__(self, message: str, *args: object):
+        super().__init__(message, *args)
+
+
+def describe_status(status_code: int) -> str:
+    """Maps an HTTP status to a generic, user-safe description."""
+    if status_code == 429:
+        return "rate limited"
+    if status_code in (401, 403):
+        return "access denied"
+    if status_code >= 500:
+        return "temporarily unavailable"
+    return f"returned status {status_code}"
+
+
 class NormalizedJob:
     """Common job structure returned by all source adapters."""
 
