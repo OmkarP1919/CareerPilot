@@ -78,6 +78,12 @@ async function request(endpoint, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
       throw new ApiError("http", detail || `Request failed (${response.status}).`, response.status);
     }
 
+    // DELETE/204 endpoints return no body; calling .json() would throw and make
+    // a successful deletion look like a failure.
+    if (response.status === 204) {
+      return null;
+    }
+
     return await response.json();
   } catch (err) {
     if (err instanceof ApiError) {

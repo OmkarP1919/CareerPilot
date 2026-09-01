@@ -103,7 +103,7 @@ export default function ResumesPage() {
     formData.append("file", file);
 
     try {
-      await api.uploadFile("/resumes/upload", formData);
+      await api.uploadFile("/resumes", formData);
       notify("Resume uploaded and parsed successfully!");
       await fetchResumes();
     } catch (err) {

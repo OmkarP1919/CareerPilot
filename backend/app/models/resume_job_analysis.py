@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, Text
+from sqlalchemy.orm import relationship
 from sqlalchemy.types import JSON
 from app.database.base import Base
 
@@ -30,3 +31,5 @@ class ResumeJobAnalysis(Base):
     analysis_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    resume = relationship("Resume", back_populates="resume_job_analyses")

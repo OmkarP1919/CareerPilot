@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from app.database.base import get_db
@@ -8,6 +9,8 @@ from app.models.user import User
 from app.models.resume import Resume
 from app.schemas.resume import ResumeResponse, ResumeParsedResponse
 from app.services.resume_parser import parse_and_store
+
+logger = logging.getLogger("app.api.resumes")
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
@@ -132,8 +135,20 @@ def delete_resume(
 ):
     resume = _get_own_resume(resume_id, user, db)
 
-    if os.path.exists(resume.file_path):
-        os.remove(resume.file_path)
-
+    # Dependent records derived from this resume (ResumeJobAnalysis,
+    # TailoredResume, CoverLetter) are removed via ORM cascade on the Resume
+    # model. The commit is atomic: either the resume and all its directly
+    # derived records are removed, or the whole transaction rolls back.
     db.delete(resume)
     db.commit()
+
+    # Remove the stored PDF only after a successful commit so a failed
+    # transaction never leaves the database pointing at a deleted file. This
+    # step is best-effort: a leftover file on disk must never surface as an
+    # error for an already-committed deletion.
+    if resume.file_path:
+        try:
+            if os.path.exists(resume.file_path):
+                os.remove(resume.file_path)
+        except OSError:
+            logger.warning("Could not remove resume file from disk after a committed deletion")

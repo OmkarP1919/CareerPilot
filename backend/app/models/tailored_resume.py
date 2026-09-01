@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, ForeignKey, Text
+from sqlalchemy.orm import relationship
 from sqlalchemy.types import JSON
 from app.database.base import Base
 
@@ -37,3 +38,5 @@ class TailoredResume(Base):
     model = Column(String, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    resume = relationship("Resume", back_populates="tailored_resumes")
