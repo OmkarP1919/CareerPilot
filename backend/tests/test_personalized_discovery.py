@@ -124,10 +124,12 @@ class TestPersonalizedDiscoveryUnit(unittest.TestCase):
     @patch("app.services.personalized_discovery.JobicySource")
     def test_source_failure_resilience(self, MockJobicy, MockAdzuna):
         mock_adzuna = MagicMock()
+        mock_adzuna.name = "Adzuna"
         mock_adzuna.fetch.side_effect = Exception("Adzuna API timeout")
         MockAdzuna.return_value = mock_adzuna
 
         mock_jobicy = MagicMock()
+        mock_jobicy.name = "Jobicy"
         mock_jobicy.fetch.return_value = []
         MockJobicy.return_value = mock_jobicy
 
@@ -208,10 +210,12 @@ class TestMultiUserIntegrationAndRanking(unittest.TestCase):
         )
 
         mock_adzuna = MagicMock()
+        mock_adzuna.name = "Adzuna"
         mock_adzuna.fetch.return_value = [sample_job_x]
         MockAdzuna.return_value = mock_adzuna
 
         mock_jobicy = MagicMock()
+        mock_jobicy.name = "Jobicy"
         mock_jobicy.fetch.return_value = []
         MockJobicy.return_value = mock_jobicy
 
@@ -321,6 +325,7 @@ class TestMultiUserIntegrationAndRanking(unittest.TestCase):
         MockAdzuna.return_value = mock_adzuna
 
         mock_jobicy = MagicMock()
+        mock_jobicy.name = "Jobicy"
         mock_jobicy.fetch.return_value = []
         MockJobicy.return_value = mock_jobicy
 
@@ -345,9 +350,11 @@ class TestMultiUserIntegrationAndRanking(unittest.TestCase):
             posted_at="2026-08-20T10:00:00Z",
         )
         mock_adzuna = MagicMock()
+        mock_adzuna.name = "Adzuna"
         mock_adzuna.fetch.return_value = [sample_job_x]
         MockAdzuna.return_value = mock_adzuna
         mock_jobicy = MagicMock()
+        mock_jobicy.name = "Jobicy"
         mock_jobicy.fetch.return_value = []
         MockJobicy.return_value = mock_jobicy
 
@@ -398,10 +405,12 @@ class TestMultiUserIntegrationAndRanking(unittest.TestCase):
             source="Adzuna",
         )
         mock_adzuna = MagicMock()
+        mock_adzuna.name = "Adzuna"
         mock_adzuna.fetch.return_value = [sample_job_x]
         MockAdzuna.return_value = mock_adzuna
 
         mock_jobicy = MagicMock()
+        mock_jobicy.name = "Jobicy"
         mock_jobicy.fetch.side_effect = SourceUnavailableError("timed out")
         MockJobicy.return_value = mock_jobicy
 
@@ -425,10 +434,12 @@ class TestMultiUserIntegrationAndRanking(unittest.TestCase):
             source="Jobicy",
         )
         mock_adzuna = MagicMock()
+        mock_adzuna.name = "Adzuna"
         mock_adzuna.fetch.side_effect = SourceUnavailableError("timed out")
         MockAdzuna.return_value = mock_adzuna
 
         mock_jobicy = MagicMock()
+        mock_jobicy.name = "Jobicy"
         mock_jobicy.fetch.return_value = [sample_job_x]
         MockJobicy.return_value = mock_jobicy
 
@@ -443,10 +454,12 @@ class TestMultiUserIntegrationAndRanking(unittest.TestCase):
         """Both sources fail -> controlled empty result with both errors listed,
         no raw exceptions, no partial rows committed."""
         mock_adzuna = MagicMock()
+        mock_adzuna.name = "Adzuna"
         mock_adzuna.fetch.side_effect = SourceUnavailableError("timed out")
         MockAdzuna.return_value = mock_adzuna
 
         mock_jobicy = MagicMock()
+        mock_jobicy.name = "Jobicy"
         mock_jobicy.fetch.side_effect = SourceUnavailableError("HTTP 503")
         MockJobicy.return_value = mock_jobicy
 

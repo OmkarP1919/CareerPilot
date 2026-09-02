@@ -71,4 +71,5 @@ class PersonalizedDiscoveryResponse(BaseModel):
     existing_jobs: int
     matches_created: int
     errors: list[str] = []
+    source_statuses: dict[str, str] | None = None
 

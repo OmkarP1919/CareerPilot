@@ -13,7 +13,14 @@ from app.services.job_discovery import (
 )
 from app.services.job_sources.adzuna import AdzunaSource
 from app.services.job_sources.jobicy import JobicySource
-from app.services.job_sources.base import NormalizedJob, SourceUnavailableError
+from app.services.job_sources.jooble import JoobleSource
+from app.services.job_sources.base import (
+    NormalizedJob,
+    SearchCriteria,
+    SourceStatus,
+    SourceUnavailableError,
+)
+from app.services.job_sources.orchestrator import DiscoveryOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -362,38 +369,25 @@ class PersonalizedDiscoveryService:
         )
 
         # Source orchestration with isolated exception handling
-        adzuna = AdzunaSource()
-        jobicy = JobicySource()
+        providers = [AdzunaSource(), JobicySource(), JoobleSource()]
+        criteria = SearchCriteria(queries=queries, locations=location_terms, country=detected_country)
+        orchestrator = DiscoveryOrchestrator(providers)
 
-        sources_counts: dict[str, int] = {"Adzuna": 0, "Jobicy": 0}
+        orchestrated = orchestrator.search(criteria, concurrency=True)
+
+        sources_counts: dict[str, int] = {}
         all_fetched: list[NormalizedJob] = []
         errors: list[str] = []
 
-        # Fetch from Adzuna (top 2 queries)
-        try:
-            adzuna_jobs = adzuna.fetch(queries[:2], location_terms, country=detected_country)
-            sources_counts["Adzuna"] = len(adzuna_jobs)
-            all_fetched.extend(adzuna_jobs)
-            logger.info("Adzuna returned %d jobs for user %s", len(adzuna_jobs), user_id)
-        except SourceUnavailableError as e:
-            logger.warning("Adzuna unavailable for user %s: %s", user_id, e)
-            errors.append("Adzuna was temporarily unavailable.")
-        except Exception:
-            logger.exception("Adzuna search failed for user %s", user_id)
-            errors.append("Adzuna was temporarily unavailable.")
-
-        # Fetch from Jobicy (top 2 queries)
-        try:
-            jobicy_jobs = jobicy.fetch(queries[:2], location_terms)
-            sources_counts["Jobicy"] = len(jobicy_jobs)
-            all_fetched.extend(jobicy_jobs)
-            logger.info("Jobicy returned %d jobs for user %s", len(jobicy_jobs), user_id)
-        except SourceUnavailableError as e:
-            logger.warning("Jobicy unavailable for user %s: %s", user_id, e)
-            errors.append("Jobicy was temporarily unavailable.")
-        except Exception:
-            logger.exception("Jobicy search failed for user %s", user_id)
-            errors.append("Jobicy was temporarily unavailable.")
+        for result in orchestrated["results"]:
+            sources_counts[result.source] = len(result.jobs)
+            all_fetched.extend(result.jobs)
+            if result.error_message:
+                errors.append(result.error_message)
+            logger.info(
+                "Provider %s returned %d jobs (status=%s) for user %s",
+                result.source, len(result.jobs), result.status.value, user_id,
+            )
 
         # Global Deduplication & Global Job Upsert
         new_jobs = 0
@@ -519,6 +513,9 @@ class PersonalizedDiscoveryService:
         return {
             "queries_used": queries,
             "sources": sources_counts,
+            "source_statuses": {
+                r.source: r.status.value for r in orchestrated["results"]
+            },
             "new_jobs": new_jobs,
             "existing_jobs": existing_jobs,
             "matches_created": matches_created,

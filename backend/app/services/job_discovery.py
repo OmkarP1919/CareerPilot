@@ -9,6 +9,7 @@ from app.models.job_match import JobMatch
 from app.services.matching import calculate_match
 from app.services.job_sources.adzuna import AdzunaSource
 from app.services.job_sources.jobicy import JobicySource
+from app.services.job_sources.jooble import JoobleSource
 from app.services.job_sources.base import NormalizedJob
 
 logger = logging.getLogger(__name__)
@@ -157,7 +158,7 @@ def discover_jobs(user_id: str, db: Session) -> dict:
             ],
         }
 
-    sources = [AdzunaSource(), JobicySource()]
+    sources = [AdzunaSource(), JobicySource(), JoobleSource()]
     all_fetched: list[NormalizedJob] = []
     errors: list[str] = []
 

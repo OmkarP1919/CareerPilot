@@ -5,6 +5,7 @@ import httpx
 from app.services.job_sources.base import (
     BaseJobSource,
     NormalizedJob,
+    ProviderCapabilities,
     SourceUnavailableError,
     describe_status,
 )
@@ -26,7 +27,16 @@ def strip_html(text: str) -> str:
 class JobicySource(BaseJobSource):
     name = "Jobicy"
 
-    def fetch(self, queries: list[str], locations: list[str] | None = None) -> list[NormalizedJob]:
+    @property
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            supports_remote=True,
+            supports_job_type=True,
+            supports_experience_level=True,
+            supports_posted_date=True,
+        )
+
+    def fetch(self, queries: list[str], locations: list[str] | None = None, **kwargs) -> list[NormalizedJob]:
         timeout = get_settings().JOBICY_TIMEOUT_SECONDS
         jobs: list[NormalizedJob] = []
         source_errors: list[str] = []

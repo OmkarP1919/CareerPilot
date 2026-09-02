@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from app.services.job_sources.base import (
     BaseJobSource,
     NormalizedJob,
+    ProviderCapabilities,
     SourceUnavailableError,
+    SourceStatus,
     describe_status,
 )
 from app.core.config import get_settings
@@ -25,12 +27,28 @@ ADZUNA_SUPPORTED_COUNTRIES = {
 class AdzunaSource(BaseJobSource):
     name = "Adzuna"
 
+    @property
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            supports_location=True,
+            supports_salary=True,
+            supports_pagination=True,
+            supports_job_type=True,
+            supports_posted_date=True,
+        )
+
+    @property
+    def is_enabled(self) -> bool:
+        settings = get_settings()
+        return bool(settings.ADZUNA_APP_ID and settings.ADZUNA_APP_KEY)
+
     def fetch(
         self,
         queries: list[str],
         locations: list[str] | None = None,
-        country: str | None = None,
+        **kwargs,
     ) -> list[NormalizedJob]:
+        country = kwargs.get("country")
         settings = get_settings()
         app_id = settings.ADZUNA_APP_ID
         app_key = settings.ADZUNA_APP_KEY
