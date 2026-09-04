@@ -128,6 +128,30 @@ export const api = {
     return this.post("/jobs/discover/personalized", {}, DISCOVERY_TIMEOUT_MS);
   },
 
+  discoverFiltered(payload = {}) {
+    return this.post("/jobs/discovery/filtered", payload, DISCOVERY_TIMEOUT_MS);
+  },
+
+  getDiscoverSources() {
+    return this.get("/jobs/discovery/sources");
+  },
+
+  getSavedSearches() {
+    return this.get("/jobs/discovery/saved-searches");
+  },
+
+  createSavedSearch(name, criteria) {
+    return this.post("/jobs/discovery/saved-searches", { name, criteria });
+  },
+
+  runSavedSearch(searchId) {
+    return this.post(`/jobs/discovery/saved-searches/${searchId}/run`, {}, DISCOVERY_TIMEOUT_MS);
+  },
+
+  deleteSavedSearch(searchId) {
+    return this.delete(`/jobs/discovery/saved-searches/${searchId}`);
+  },
+
   analyzeResume(jobId, resumeId) {
     return this.post(`/jobs/${jobId}/resume-analysis`, { resume_id: resumeId });
   },

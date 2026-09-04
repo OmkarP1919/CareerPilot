@@ -3,6 +3,15 @@
 Provides a simple factory that returns all enabled providers based on
 configuration. The orchestrator iterates over the list returned by
 ``get_providers()`` without knowing which concrete classes are involved.
+
+NOTE: ``personalized_discovery.py`` deliberately does NOT use this registry.
+It constructs ``[AdzunaSource(), JobicySource(), JoobleSource()]`` manually
+because this registry gates out unconfigured providers (returning neither the
+provider nor a ``disabled`` status). Passing all three to the orchestrator
+preserves the externally visible per-source ``source_statuses``/``sources_count``
+metadata (unconfigured sources report ``DISABLED`` rather than vanishing) and
+keeps the test patches on ``personalized_discovery.AdzunaSource`` etc. intact.
+New callers that do not need the ``disabled`` status may use ``get_providers()``.
 """
 from __future__ import annotations
 

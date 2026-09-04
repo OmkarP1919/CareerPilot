@@ -5,6 +5,7 @@ from app.api.auth import router as auth_router
 from app.api.profile import router as profile_router
 from app.api.resumes import router as resumes_router
 from app.api.jobs import router as jobs_router
+from app.api.discovery import router as discovery_router
 from app.api.match import router as match_router
 from app.api.resume_analysis import router as resume_analysis_router
 from app.api.resume_tailoring import router as resume_tailoring_router
@@ -37,6 +38,7 @@ app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(resumes_router)
 app.include_router(jobs_router)
+app.include_router(discovery_router)
 app.include_router(match_router)
 app.include_router(resume_analysis_router)
 app.include_router(resume_tailoring_router)

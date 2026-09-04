@@ -3017,3 +3017,233 @@ html[data-theme="dark"] .toggle-switch-btn {
     align-self: flex-start;
   }
 }
+
+/* ============================================================
+   Phase 5C - Discovery Panel
+   ============================================================ */
+.discover-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+.discover-filters {
+  padding: var(--space-4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.discover-filters-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--slate-800, #1e293b);
+}
+
+.discover-source-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.source-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--slate-200, #e2e8f0);
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--slate-700, #334155);
+  background: var(--bg-surface-secondary, #f8fafc);
+}
+
+.source-checkbox input {
+  accent-color: var(--accent-600, #0d9488);
+}
+
+.source-hint {
+  font-size: 12px;
+  color: var(--slate-400, #94a3b8);
+  align-self: center;
+}
+
+.discover-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.discover-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--slate-600, #475569);
+}
+
+.discover-dup-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent-700, #0f766e);
+}
+
+.discover-total-fetched {
+  color: var(--slate-400, #94a3b8);
+}
+
+.discover-prov-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.discover-prov-label {
+  font-size: 12px;
+  color: var(--slate-500, #64748b);
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-50, #f0fdfa);
+  color: var(--accent-700, #0f766e);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.discover-merged-note {
+  font-size: 11px;
+  color: var(--slate-400, #94a3b8);
+}
+
+.freshness-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--slate-500, #64748b);
+}
+
+.new-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-600, #0d9488);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.salary-line {
+  color: var(--slate-600, #475569);
+}
+
+.discover-reasons {
+  margin-top: 8px;
+}
+
+.discover-reasons-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--accent-700, #0f766e);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.discover-reasons-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--slate-600, #475569);
+}
+
+.discover-reasons-list li::marker {
+  color: var(--accent-500, #14b8a6);
+}
+
+/* Saved searches */
+.discover-saved {
+  padding: var(--space-4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.discover-saved-empty {
+  font-size: 13px;
+}
+
+.discover-save-input {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.discover-save-input .form-input {
+  flex: 1 1 240px;
+}
+
+.discover-saved-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.discover-saved-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--slate-200, #e2e8f0);
+  border-radius: 10px;
+  background: var(--bg-surface-secondary, #f8fafc);
+}
+
+.discover-saved-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.discover-saved-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--slate-800, #1e293b);
+}
+
+.discover-saved-meta {
+  font-size: 12px;
+}
+
+.discover-saved-actions {
+  display: flex;
+  gap: 4px;
+}

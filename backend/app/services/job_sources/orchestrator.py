@@ -75,6 +75,43 @@ class DiscoveryOrchestrator:
             "errors": errors,
         }
 
+    def search_filtered(self, criteria: SearchCriteria, concurrency: bool = False) -> dict:
+        """Search across all providers, then run the common discovery pipeline.
+
+        This is an OPT-IN extension that does not alter :meth:`search`. After
+        aggregating provider results it runs normalization -> filtering ->
+        sorting (and optional final pagination) from the common pipeline layer,
+        so caller-facing jobs are canonicalized and filtered.
+
+        Returns a dict with:
+            results: list[SourceResult] (raw, per-provider).
+            raw_jobs: aggregated normalized jobs BEFORE the common pipeline.
+            jobs: jobs AFTER normalization + filtering + sorting.
+            errors: collected user-safe error strings.
+            filters_applied: filters evaluated by the common layer.
+        """
+        base = self.search(criteria, concurrency=concurrency)
+        raw_jobs = base["jobs"]
+
+        from app.services.job_sources.pipeline import run_pipeline
+
+        outcome = run_pipeline(
+            raw_jobs,
+            criteria,
+            page=criteria.page,
+            page_size=criteria.page_size,
+        )
+
+        return {
+            "results": base["results"],
+            "raw_jobs": raw_jobs,
+            "jobs": outcome["jobs"],
+            "total": outcome["total"],
+            "filters_applied": outcome["filters_applied"],
+            "errors": base["errors"],
+        }
+
+
     def _search_one(self, provider: BaseJobSource, criteria: SearchCriteria) -> SourceResult:
         """Run a single provider and convert any failure into a SourceResult."""
         if not provider.is_enabled:
@@ -84,11 +121,7 @@ class DiscoveryOrchestrator:
                 status=SourceStatus.DISABLED,
             )
         try:
-            fetched = provider.fetch(
-                criteria.queries,
-                locations=criteria.locations,
-                country=criteria.country,
-            )
+            fetched = provider.fetch(criteria)
             return SourceResult(
                 source=provider.name,
                 status=SourceStatus.SUCCESS,

@@ -46,12 +46,16 @@ class StubProvider(BaseJobSource):
     def is_enabled(self):
         return self._enabled
 
-    def fetch(self, queries, locations=None, **kwargs):
+    def fetch(self, criteria):
         if self.delay:
             time.sleep(self.delay)
         if self._exception is not None:
             raise self._exception
         return self._result
+
+    @property
+    def capabilities(self):
+        return ProviderCapabilities(supports_location=True)
 
 
 def make_job(external_id, source="Adzuna", title="Backend Developer",
@@ -149,6 +153,24 @@ class TestProviderInterface(unittest.TestCase):
         self.assertEqual(out["results"][0].status, SourceStatus.DISABLED)
         self.assertEqual(out["jobs"], [])
         self.assertEqual(out["errors"], [])
+
+    def test_orchestrator_passes_the_same_criteria_object(self):
+        captured = {}
+
+        class CapturingProvider(StubProvider):
+            def fetch(self, criteria):
+                captured["criteria"] = criteria
+                return self._result
+
+        criteria = SearchCriteria(
+            queries=["Python"], locations=["Pune"], country="in",
+            remote=True, salary_min=50, salary_max=150, skills=["FastAPI"],
+        )
+        out = DiscoveryOrchestrator([CapturingProvider()]).search(criteria)
+        self.assertEqual(out["results"][0].status, SourceStatus.SUCCESS)
+        # Providers receive the canonical SearchCriteria object untouched, not a
+        # split of kwargs.
+        self.assertIs(captured["criteria"], criteria)
 
     def test_describe_status_mapping(self):
         self.assertEqual(describe_status(429), "rate limited")
@@ -328,30 +350,132 @@ class TestCapabilities(unittest.TestCase):
         from app.services.job_sources.adzuna import AdzunaSource
         caps = AdzunaSource().capabilities
         self.assertTrue(caps.supports_location)
-        self.assertTrue(caps.supports_salary)
         self.assertTrue(caps.supports_pagination)
+        self.assertFalse(caps.supports_salary)
         self.assertFalse(caps.supports_remote)
+        self.assertFalse(caps.supports_job_type)
+        self.assertFalse(caps.supports_posted_date)
 
     def test_jobicy_capabilities(self):
         from app.services.job_sources.jobicy import JobicySource
         caps = JobicySource().capabilities
-        self.assertTrue(caps.supports_remote)
-        self.assertTrue(caps.supports_job_type)
+        self.assertFalse(caps.supports_remote)
+        self.assertFalse(caps.supports_job_type)
         self.assertFalse(caps.supports_salary)
+        self.assertFalse(caps.supports_location)
+        self.assertFalse(caps.supports_pagination)
 
     def test_jooble_capabilities(self):
         from app.services.job_sources.jooble import JoobleSource
         caps = JoobleSource().capabilities
         self.assertTrue(caps.supports_location)
-        self.assertTrue(caps.supports_radius)
-        self.assertTrue(caps.supports_salary)
-        self.assertTrue(caps.supports_pagination)
-        self.assertTrue(caps.supports_job_type)
+        self.assertFalse(caps.supports_radius)
+        self.assertFalse(caps.supports_salary)
+        self.assertFalse(caps.supports_pagination)
+        self.assertFalse(caps.supports_job_type)
 
     def test_default_capabilities_empty(self):
         caps = ProviderCapabilities()
         self.assertFalse(caps.supports_location)
         self.assertFalse(caps.supports_salary)
+
+
+class TestCriteriaMapping(unittest.TestCase):
+    """Providers apply ONLY the criteria their capabilities claim to support.
+    Unsupported filters must be ignored safely rather than silently mapped."""
+
+    def test_adzuna_uses_location_and_page_but_not_salary(self):
+        from app.services.job_sources.adzuna import AdzunaSource
+
+        captured = {}
+
+        def fake_get(url, params=None, timeout=None):
+            captured["params"] = dict(params or {})
+            msg = httpx.Response(
+                200, content=b'{"results": []}',
+                request=httpx.Request("GET", url),
+            )
+            return msg
+
+        criteria = SearchCriteria(
+            queries=["Python Developer"], locations=["Pune"], country="in",
+            salary_min=100, salary_max=200, remote=True, skills=["FastAPI"],
+        )
+        with patch("app.services.job_sources.adzuna.httpx.get", side_effect=fake_get), \
+             patch("app.services.job_sources.adzuna.get_settings", return_value=MagicMock(
+                 ADZUNA_APP_ID="id", ADZUNA_APP_KEY="key",
+                 ADZUNA_COUNTRY="us", ADZUNA_TIMEOUT_SECONDS=5.0,
+             )):
+            AdzunaSource().fetch(criteria)
+
+        params = captured["params"]
+        # Adzuna applies what/where and pagination...
+        self.assertEqual(params["what"], "Python Developer")
+        self.assertEqual(params["where"], "Pune")
+        self.assertIn("results_per_page", params)
+        # ...but never passes salary/remote filters it does not support upstream.
+        self.assertNotIn("salary_min", params)
+        self.assertNotIn("salary_max", params)
+        self.assertNotIn("remote", params)
+
+    def test_jooble_uses_only_keywords_and_location(self):
+        from app.services.job_sources.jooble import JoobleSource
+
+        captured = {}
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            captured["payload"] = dict(json or {})
+            return httpx.Response(
+                200, content=b'{"jobs": []}',
+                request=httpx.Request("POST", url),
+            )
+
+        criteria = SearchCriteria(
+            queries=["Engineer"], locations=["Berlin"], country="de",
+            salary_min=10, remote=False, employment_type="Full-time",
+        )
+        with patch("app.services.job_sources.jooble.httpx.post", side_effect=fake_post), \
+             patch("app.services.job_sources.jooble.get_settings", return_value=MagicMock(
+                 JOOBLE_API_KEY="k", JOOBLE_TIMEOUT_SECONDS=5.0,
+             )):
+            JoobleSource().fetch(criteria)
+
+        payload = captured["payload"]
+        self.assertEqual(payload.get("keywords"), "Engineer")
+        self.assertEqual(payload.get("location"), "Berlin")
+        # Salary / type / remote are not passed upstream.
+        self.assertNotIn("salary", payload)
+        self.assertNotIn("type", payload)
+        self.assertNotIn("remote", payload)
+
+    def test_jobicy_ignores_location(self):
+        from app.services.job_sources.jobicy import JobicySource
+
+        captured = {}
+
+        def fake_get(url, params=None, timeout=None):
+            captured["params"] = dict(params or {})
+            return httpx.Response(
+                200, content=b'{"success": true, "jobs": []}',
+                request=httpx.Request("GET", url),
+            )
+
+        criteria = SearchCriteria(
+            queries=["Developer"], locations=["Pune"], country="in",
+            employment_type="Full-time",
+        )
+        with patch("app.services.job_sources.jobicy.httpx.get", side_effect=fake_get), \
+             patch("app.services.job_sources.jobicy.get_settings", return_value=MagicMock(
+                 JOBICY_TIMEOUT_SECONDS=5.0,
+             )):
+            JobicySource().fetch(criteria)
+
+        params = captured["params"]
+        self.assertEqual(params.get("count"), 15)
+        self.assertEqual(params.get("tag"), "Developer")
+        # Jobicy does not support location / job-type upstream - not passed.
+        self.assertNotIn("location", params)
+        self.assertNotIn("jobType", params)
 
 
 class TestJoobleProvider(unittest.TestCase):
@@ -395,7 +519,7 @@ class TestJoobleProvider(unittest.TestCase):
         import json
         with patch("app.services.job_sources.jooble.httpx.post", return_value=self._response(json.dumps(payload).encode())) as mock_post, \
              patch("app.services.job_sources.jooble.get_settings", return_value=self._settings()):
-            jobs = JoobleSource().fetch(["Sales Manager"], ["Kyiv"])
+            jobs = JoobleSource().fetch(SearchCriteria(queries=["Sales Manager"], locations=["Kyiv"]))
 
         self.assertEqual(len(jobs), 1)
         job = jobs[0]
@@ -421,21 +545,21 @@ class TestJoobleProvider(unittest.TestCase):
         with patch("app.services.job_sources.jooble.httpx.post", return_value=self._response(b"not-json{{{")), \
              patch("app.services.job_sources.jooble.get_settings", return_value=self._settings()):
             with self.assertRaises(SourceUnavailableError):
-                JoobleSource().fetch(["Python"])
+                JoobleSource().fetch(SearchCriteria(queries=["Python"]))
 
     def test_timeout_raises_controlled_error(self):
         from app.services.job_sources.jooble import JoobleSource
         with patch("app.services.job_sources.jooble.httpx.post", side_effect=httpx.TimeoutException("timeout")), \
              patch("app.services.job_sources.jooble.get_settings", return_value=self._settings()):
             with self.assertRaises(SourceUnavailableError):
-                JoobleSource().fetch(["Python"])
+                JoobleSource().fetch(SearchCriteria(queries=["Python"]))
 
     def test_rate_limit_raises_controlled_error(self):
         from app.services.job_sources.jooble import JoobleSource
         with patch("app.services.job_sources.jooble.httpx.post", return_value=self._response(b"{}", status_code=429)), \
              patch("app.services.job_sources.jooble.get_settings", return_value=self._settings()):
             with self.assertRaises(SourceUnavailableError) as ctx:
-                JoobleSource().fetch(["Python"])
+                JoobleSource().fetch(SearchCriteria(queries=["Python"]))
         self.assertIn("Jooble", str(ctx.exception))
         self.assertIn("rate", str(ctx.exception))
 
@@ -454,7 +578,7 @@ class TestJoobleProvider(unittest.TestCase):
                 return_value=self._settings(),
             ):
                 with self.assertRaises(SourceUnavailableError) as ctx:
-                    JoobleSource().fetch(["Python"])
+                    JoobleSource().fetch(SearchCriteria(queries=["Python"]))
             # The exception must be a controlled, generic source error.
             self.assertEqual(ctx.exception.__class__, SourceUnavailableError)
             self.assertIn("Jooble", str(ctx.exception))
@@ -469,7 +593,7 @@ class TestJoobleProvider(unittest.TestCase):
         with patch("app.services.job_sources.jooble.httpx.post", return_value=self._response(b"{}", status_code=500)), \
              patch("app.services.job_sources.jooble.get_settings", return_value=self._settings()):
             with self.assertRaises(SourceUnavailableError):
-                JoobleSource().fetch(["Python"])
+                JoobleSource().fetch(SearchCriteria(queries=["Python"]))
 
     def test_missing_fields_are_null_safe(self):
         from app.services.job_sources.jooble import JoobleSource
@@ -477,7 +601,7 @@ class TestJoobleProvider(unittest.TestCase):
         import json
         with patch("app.services.job_sources.jooble.httpx.post", return_value=self._response(json.dumps(payload).encode())), \
              patch("app.services.job_sources.jooble.get_settings", return_value=self._settings()):
-            jobs = JoobleSource().fetch(["Python"])
+            jobs = JoobleSource().fetch(SearchCriteria(queries=["Python"]))
         self.assertEqual(len(jobs), 1)
         job = jobs[0]
         self.assertEqual(job.external_id, "42")
@@ -495,14 +619,14 @@ class TestJoobleProvider(unittest.TestCase):
         import json
         with patch("app.services.job_sources.jooble.httpx.post", return_value=self._response(json.dumps(payload).encode())), \
              patch("app.services.job_sources.jooble.get_settings", return_value=self._settings()):
-            jobs = JoobleSource().fetch(["Python"])
+            jobs = JoobleSource().fetch(SearchCriteria(queries=["Python"]))
         self.assertEqual(len(jobs), 1)
 
     def test_no_api_key_fetch_returns_empty(self):
         from app.services.job_sources.jooble import JoobleSource
         with patch("app.services.job_sources.jooble.get_settings", return_value=MagicMock(JOOBLE_API_KEY="", JOOBLE_TIMEOUT_SECONDS=5.0)), \
              patch("app.services.job_sources.jooble.httpx.post", side_effect=AssertionError("must not call HTTP")):
-            jobs = JoobleSource().fetch(["Python"])
+            jobs = JoobleSource().fetch(SearchCriteria(queries=["Python"]))
         self.assertEqual(jobs, [])
 
     def test_is_enabled_reflects_key(self):
@@ -519,12 +643,31 @@ class TestNormalization(unittest.TestCase):
 
     def test_jooble_salary_range_parsing(self):
         from app.services.job_sources.jooble import _parse_salary
-        self.assertEqual(_parse_salary("50,000 - 80,000 USD"), (50000, 80000, "USD"))
-        self.assertEqual(_parse_salary("17,600 UAH"), (17600, 17600, "UAH"))
-        self.assertEqual(_parse_salary("50000"), (50000, 50000, None))
-        self.assertEqual(_parse_salary(None), (None, None, None))
-        self.assertEqual(_parse_salary("hybrid salary"), (None, None, None))
-        self.assertEqual(_parse_salary("1000000 EUR"), (1000000, 1000000, "EUR"))
+        self.assertEqual(_parse_salary("50,000 - 80,000 USD"), (50000, 80000, "USD", "unknown"))
+        self.assertEqual(_parse_salary("17,600 UAH"), (17600, 17600, "UAH", "unknown"))
+        self.assertEqual(_parse_salary("50000"), (50000, 50000, None, "unknown"))
+        self.assertEqual(_parse_salary(None), (None, None, None, "unknown"))
+        self.assertEqual(_parse_salary("hybrid salary"), (None, None, None, "unknown"))
+        self.assertEqual(_parse_salary("1000000 EUR"), (1000000, 1000000, "EUR", "unknown"))
+
+    def test_jooble_salary_period_and_symbol_parsing(self):
+        from app.services.job_sources.jooble import _parse_salary
+        # Pay-period markers map to the canonical period and are preserved
+        # (never converted).
+        self.assertEqual(_parse_salary("60,000 per year"), (60000, 60000, None, "annual"))
+        self.assertEqual(_parse_salary("60,000 annually"), (60000, 60000, None, "annual"))
+        self.assertEqual(_parse_salary("5,000 per month"), (5000, 5000, None, "monthly"))
+        self.assertEqual(_parse_salary("500 per week"), (500, 500, None, "weekly"))
+        self.assertEqual(_parse_salary("200 per day"), (200, 200, None, "daily"))
+        self.assertEqual(_parse_salary("50 per hour"), (50, 50, None, "hourly"))
+        # Ambiguous 'pa' is deliberately NOT treated as a period (could be a
+        # stray token), so it stays unknown.
+        self.assertEqual(_parse_salary("60,000 pa"), (60000, 60000, None, "unknown"))
+        # Currency symbols, including mixed Indian-lakh ranges, strip cleanly.
+        self.assertEqual(_parse_salary("₹6,00,000 - ₹9,00,000"), (600000, 900000, "INR", "unknown"))
+        self.assertEqual(_parse_salary("$80,000 - $100,000"), (80000, 100000, "USD", "unknown"))
+        self.assertEqual(_parse_salary("€50,000"), (50000, 50000, "EUR", "unknown"))
+        self.assertEqual(_parse_salary("£35,000"), (35000, 35000, "GBP", "unknown"))
 
     def test_jooble_date_normalization(self):
         from app.services.job_sources.jooble import JoobleSource

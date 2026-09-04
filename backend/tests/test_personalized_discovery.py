@@ -10,7 +10,7 @@ from app.models.user import User
 from app.models.profile import Profile, Skill, UserSkill, Project, Experience, Education
 from app.models.job import Job
 from app.models.job_match import JobMatch
-from app.services.job_sources.base import NormalizedJob, SourceUnavailableError
+from app.services.job_sources.base import NormalizedJob, SearchCriteria, SourceUnavailableError
 from app.services.personalized_discovery import (
     resolve_country_and_location,
     classify_experience_level,
@@ -483,7 +483,7 @@ class TestSourceReliability(unittest.TestCase):
 
         mock_get.side_effect = httpx.TimeoutException("timeout")
         with self.assertRaises(SourceUnavailableError) as ctx:
-            AdzunaSource().fetch(["Python Developer"], ["Pune"], country="in")
+            AdzunaSource().fetch(SearchCriteria(queries=["Python Developer"], locations=["Pune"], country="in"))
         message = str(ctx.exception)
         self.assertIn("Adzuna", message)
         self.assertNotIn("timeout", message.lower().replace("timed out", ""))
@@ -495,7 +495,7 @@ class TestSourceReliability(unittest.TestCase):
         response = httpx.Response(429, request=httpx.Request("GET", "https://api.adzuna.com"))
         mock_get.return_value = response
         with self.assertRaises(SourceUnavailableError) as ctx:
-            AdzunaSource().fetch(["Python Developer"], ["Pune"], country="in")
+            AdzunaSource().fetch(SearchCriteria(queries=["Python Developer"], locations=["Pune"], country="in"))
         message = str(ctx.exception)
         # 429 -> "rate limited"; never expose status plumbing verbosely to users.
         self.assertIn("Adzuna", message)
@@ -506,7 +506,7 @@ class TestSourceReliability(unittest.TestCase):
 
         mock_get.side_effect = httpx.TimeoutException("timeout")
         with self.assertRaises(SourceUnavailableError) as ctx:
-            JobicySource().fetch(["Python Developer"])
+            JobicySource().fetch(SearchCriteria(queries=["Python Developer"]))
         self.assertIn("Jobicy", str(ctx.exception))
 
     @patch("app.services.job_sources.jobicy.httpx.get")
@@ -520,7 +520,7 @@ class TestSourceReliability(unittest.TestCase):
         )
         mock_get.return_value = response
         with self.assertRaises(SourceUnavailableError):
-            JobicySource().fetch(["Python Developer"])
+            JobicySource().fetch(SearchCriteria(queries=["Python Developer"]))
 
 
 class TestDiscoveryAPI(unittest.TestCase):

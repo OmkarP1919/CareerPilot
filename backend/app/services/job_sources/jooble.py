@@ -1,12 +1,13 @@
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 import httpx
 from app.services.job_sources.base import (
     BaseJobSource,
     NormalizedJob,
     ProviderCapabilities,
+    SearchCriteria,
     SourceUnavailableError,
     describe_status,
 )
@@ -18,27 +19,84 @@ JOOBLE_BASE_URL = "https://jooble.org/api"
 RESULTS_PER_PAGE = 10
 
 
-def _parse_salary(raw_salary: str | None) -> tuple[int | None, int | None, str | None]:
-    """Parse Jooble salary string like '17,600 UAH' into (min, max, currency)."""
+#: Currency symbols Jooble may use inline, mapped to ISO 4217 codes.
+_CURRENCY_BY_SYMBOL = {
+    "₹": "INR",
+    "$": "USD",
+    "€": "EUR",
+    "£": "GBP",
+}
+
+#: Deterministic pay-period markers (checked in order). We preserve the period
+#: but never convert amounts across periods; ambiguous strings default to
+#: "unknown" rather than guessing.
+_PERIOD_ALIASES = [
+    (("per year", "/year", "/yr", "annually", "annual", "per annum"), "annual"),
+    (("per month", "/month", "/mo", "monthly"), "monthly"),
+    (("per week", "/week", "weekly"), "weekly"),
+    (("per day", "/day", "daily"), "daily"),
+    (("per hour", "/hour", "hourly"), "hourly"),
+]
+
+
+def _detect_salary_period(raw: str) -> str:
+    """Return the canonical pay period for a salary string, or 'unknown'."""
+    low = raw.lower()
+    for aliases, period in _PERIOD_ALIASES:
+        for alias in aliases:
+            if re.search(rf"(?<![a-z]){re.escape(alias)}(?![a-z])", low):
+                return period
+    return "unknown"
+
+
+def _parse_salary(
+    raw_salary: str | None,
+) -> tuple[int | None, int | None, str | None, str]:
+    """Parse a Jooble salary string into (min, max, currency, period).
+
+    Handles trailing 3-letter codes ('17,600 UAH'), leading/inline currency
+    symbols ('₹6,00,000 - ₹9,00,000', '$80,000 - $100,000'), ranges and single
+    amounts, and deterministic pay-period markers. Currency is preserved but
+    never converted; amounts are not converted across pay periods.
+    """
     if not raw_salary:
-        return None, None, None
+        return None, None, None, "unknown"
     cleaned = raw_salary.strip()
-    # Extract trailing currency code (3 uppercase letters)
-    currency_match = re.search(r"\s+([A-Z]{3})\s*$", cleaned)
-    currency = currency_match.group(1) if currency_match else None
-    # Remove currency suffix
-    amount_part = cleaned[:currency_match.start()] if currency_match else cleaned
-    # Remove commas and whitespace
+    period = _detect_salary_period(cleaned)
+
+    currency = None
+    # Trailing 3-letter ISO currency code, e.g. "17,600 UAH".
+    trailing_code = re.search(r"\s+([A-Z]{3})\s*$", cleaned)
+    if trailing_code:
+        currency = trailing_code.group(1)
+        amount_part = cleaned[:trailing_code.start()]
+    else:
+        amount_part = cleaned
+
+    # Leading currency symbol (only meaningful at the start).
+    stripped = amount_part.lstrip()
+    if not currency:
+        for symbol, code in _CURRENCY_BY_SYMBOL.items():
+            if stripped.startswith(symbol):
+                currency = code
+                break
+
+    # Remove all currency symbols so ranges like "₹6,00,000 - ₹9,00,000" parse.
+    symbols = "".join(_CURRENCY_BY_SYMBOL.keys())
+    amount_part = re.sub("[" + re.escape(symbols) + "]", "", amount_part)
+    # Remove inline currency codes and stray letters.
+    amount_part = re.sub(r"[A-Za-z]+", "", amount_part)
+    # Remove commas and whitespace.
     amount_part = re.sub(r"[,\s]", "", amount_part)
-    # Handle ranges: "17600 - 25000" or single "17600"
+
     range_match = re.match(r"(\d+)\s*-\s*(\d+)", amount_part)
     if range_match:
-        return int(range_match.group(1)), int(range_match.group(2)), currency
+        return int(range_match.group(1)), int(range_match.group(2)), currency, period
     single_match = re.match(r"(\d+)", amount_part)
     if single_match:
         val = int(single_match.group(1))
-        return val, val, currency
-    return None, None, None
+        return val, val, currency, period
+    return None, None, None, period
 
 
 class JoobleSource(BaseJobSource):
@@ -46,13 +104,12 @@ class JoobleSource(BaseJobSource):
 
     @property
     def capabilities(self) -> ProviderCapabilities:
+        # The current adapter only sends `keywords` and `location`. Although the
+        # Jooble API also documents salary/page/etc., this adapter does NOT pass
+        # those criteria upstream yet, so only location is reported as
+        # supported. Do NOT claim a capability the adapter does not use.
         return ProviderCapabilities(
             supports_location=True,
-            supports_radius=True,
-            supports_salary=True,
-            supports_pagination=True,
-            supports_job_type=True,
-            supports_posted_date=True,
         )
 
     @property
@@ -60,12 +117,7 @@ class JoobleSource(BaseJobSource):
         settings = get_settings()
         return bool(settings.JOOBLE_API_KEY)
 
-    def fetch(
-        self,
-        queries: list[str],
-        locations: list[str] | None = None,
-        **kwargs,
-    ) -> list[NormalizedJob]:
+    def fetch(self, criteria: SearchCriteria) -> list[NormalizedJob]:
         settings = get_settings()
         api_key = settings.JOOBLE_API_KEY
         timeout = settings.JOOBLE_TIMEOUT_SECONDS
@@ -76,9 +128,9 @@ class JoobleSource(BaseJobSource):
 
         jobs: list[NormalizedJob] = []
         source_errors: list[str] = []
-        primary_location = locations[0] if locations else ""
+        primary_location = criteria.locations[0] if criteria.locations else ""
 
-        for query in queries[:2]:
+        for query in criteria.queries[:2]:
             try:
                 fetched = self._search(api_key, query, primary_location, timeout)
                 jobs.extend(fetched)
@@ -141,12 +193,17 @@ class JoobleSource(BaseJobSource):
             if not isinstance(item, dict):
                 continue
 
-            salary_min, salary_max, salary_currency = _parse_salary(item.get("salary"))
+            salary_min, salary_max, salary_currency, salary_period = _parse_salary(item.get("salary"))
 
             employment_type = item.get("type")
             if employment_type:
                 employment_type = employment_type.strip()
 
+            # Jooble exposes a single "updated" timestamp (listing update time)
+            # and no distinct "posted" timestamp. We use it as the posted_at
+            # freshness proxy to keep recency ordering working; updated_at is
+            # left None because Jooble does not distinguish the two. This is a
+            # documented pragmatic fallback, NOT fetched_at substitution.
             posted_at = item.get("updated")
             if posted_at:
                 try:
@@ -173,6 +230,7 @@ class JoobleSource(BaseJobSource):
                 salary_min=salary_min,
                 salary_max=salary_max,
                 salary_currency=salary_currency,
+                salary_period=salary_period,
                 raw_data=item,
             ))
 

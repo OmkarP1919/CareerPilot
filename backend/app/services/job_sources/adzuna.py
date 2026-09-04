@@ -1,13 +1,13 @@
 import json
 import logging
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime
 from app.services.job_sources.base import (
     BaseJobSource,
     NormalizedJob,
     ProviderCapabilities,
+    SearchCriteria,
     SourceUnavailableError,
-    SourceStatus,
     describe_status,
 )
 from app.core.config import get_settings
@@ -29,12 +29,14 @@ class AdzunaSource(BaseJobSource):
 
     @property
     def capabilities(self) -> ProviderCapabilities:
+        # The current adapter only passes `what` (query), `where` (location),
+        # and pagination (`page` in the URL + `results_per_page`). Salary,
+        # job type, posted date, remote, etc. are NOT applied upstream, so they
+        # are intentionally reported as unsupported to avoid claiming filters
+        # that the adapter does not actually use.
         return ProviderCapabilities(
             supports_location=True,
-            supports_salary=True,
             supports_pagination=True,
-            supports_job_type=True,
-            supports_posted_date=True,
         )
 
     @property
@@ -42,18 +44,13 @@ class AdzunaSource(BaseJobSource):
         settings = get_settings()
         return bool(settings.ADZUNA_APP_ID and settings.ADZUNA_APP_KEY)
 
-    def fetch(
-        self,
-        queries: list[str],
-        locations: list[str] | None = None,
-        **kwargs,
-    ) -> list[NormalizedJob]:
-        country = kwargs.get("country")
+    def fetch(self, criteria: SearchCriteria) -> list[NormalizedJob]:
         settings = get_settings()
         app_id = settings.ADZUNA_APP_ID
         app_key = settings.ADZUNA_APP_KEY
         timeout = settings.ADZUNA_TIMEOUT_SECONDS
-        target_country = (country or settings.ADZUNA_COUNTRY or "us").lower()
+
+        target_country = (criteria.country or settings.ADZUNA_COUNTRY or "us").lower()
         if target_country not in ADZUNA_SUPPORTED_COUNTRIES:
             target_country = settings.ADZUNA_COUNTRY or "us"
 
@@ -63,11 +60,14 @@ class AdzunaSource(BaseJobSource):
 
         jobs: list[NormalizedJob] = []
         source_errors: list[str] = []
-        primary_location = locations[0] if locations else None
+        primary_location = criteria.locations[0] if criteria.locations else None
 
-        for query in queries[:2]:
+        for query in criteria.queries[:2]:
             try:
-                fetched = self._search(app_id, app_key, target_country, query, primary_location, timeout)
+                fetched = self._search(
+                    app_id, app_key, target_country, query,
+                    primary_location, timeout, criteria.page, criteria.page_size,
+                )
                 jobs.extend(fetched)
             except httpx.HTTPStatusError as e:
                 source_errors.append(describe_status(e.response.status_code))
@@ -78,7 +78,7 @@ class AdzunaSource(BaseJobSource):
                 if target_country != "us":
                     target_country = "us"
                     try:
-                        fetched = self._search(app_id, app_key, "us", query, None, timeout)
+                        fetched = self._search(app_id, app_key, "us", query, None, timeout, 1, criteria.page_size)
                         jobs.extend(fetched)
                     except Exception:
                         logger.warning("Adzuna US fallback failed for query='%s'", query)
@@ -102,13 +102,21 @@ class AdzunaSource(BaseJobSource):
         return jobs
 
     def _search(
-        self, app_id: str, app_key: str, country: str, what: str, where: str | None, timeout: float
+        self,
+        app_id: str,
+        app_key: str,
+        country: str,
+        what: str,
+        where: str | None,
+        timeout: float,
+        page: int,
+        page_size: int,
     ) -> list[NormalizedJob]:
-        url = f"{ADZUNA_BASE_URL}/{country}/search/1"
+        url = f"{ADZUNA_BASE_URL}/{country}/search/{max(page, 1)}"
         params = {
             "app_id": app_id,
             "app_key": app_key,
-            "results_per_page": RESULTS_PER_PAGE,
+            "results_per_page": page_size if page_size and page_size > 0 else RESULTS_PER_PAGE,
             "what": what,
             "content-type": "application/json",
         }

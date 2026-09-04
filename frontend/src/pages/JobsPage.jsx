@@ -4,6 +4,7 @@ import { api } from "../services/api";
 import { useTranslation } from "../context/LanguageContext";
 import ScoreBadge from "../components/ScoreBadge";
 import EmptyState from "../components/EmptyState";
+import DiscoverPanel from "../components/DiscoverPanel";
 import { SkeletonCard } from "../components/Skeleton";
 import Modal from "../components/Modal";
 import {
@@ -432,8 +433,7 @@ export default function JobsPage() {
       <section className="jobs-workspace-controls">
         <div className="jobs-controls-top">
           {/* Tabs */}
-          <div className="tabs-pill" role="tablist">
-            <button
+          <div className="tabs-pill" role="tablist">            <button
               type="button"
               className={`tab-pill-item ${activeTab === "recommended" ? "active" : ""}`}
               onClick={() => setActiveTab("recommended")}
@@ -453,9 +453,19 @@ export default function JobsPage() {
               <span>{t("jobs.allTab", "All Opportunities")}</span>
               <span className="tab-pill-count">{myJobs.length}</span>
             </button>
+            <button
+              type="button"
+              className={`tab-pill-item ${activeTab === "discovery" ? "active" : ""}`}
+              onClick={() => setActiveTab("discovery")}
+              role="tab"
+              aria-selected={activeTab === "discovery"}
+            >
+              <span>Discovery</span>
+            </button>
           </div>
 
           {/* Search bar */}
+          {activeTab !== "discovery" && (
           <div className="jobs-search-wrap">
             <Search size={16} className="search-icon" />
             <input
@@ -476,9 +486,11 @@ export default function JobsPage() {
               </button>
             )}
           </div>
+          )}
         </div>
 
         {/* Compact Filters row */}
+        {activeTab !== "discovery" && (
         <div className="jobs-filters-row">
           <div className="filter-group">
             <select
@@ -526,10 +538,13 @@ export default function JobsPage() {
             </button>
           )}
         </div>
+        )}
       </section>
 
       {/* Job Cards Grid / List */}
-      {loading ? (
+      {activeTab === "discovery" ? (
+        <DiscoverPanel />
+      ) : loading ? (
         <div className="stack" style={{ gap: "var(--space-4)" }}>
           <SkeletonCard />
           <SkeletonCard />

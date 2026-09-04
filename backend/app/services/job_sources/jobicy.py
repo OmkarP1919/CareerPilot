@@ -6,6 +6,7 @@ from app.services.job_sources.base import (
     BaseJobSource,
     NormalizedJob,
     ProviderCapabilities,
+    SearchCriteria,
     SourceUnavailableError,
     describe_status,
 )
@@ -29,19 +30,19 @@ class JobicySource(BaseJobSource):
 
     @property
     def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(
-            supports_remote=True,
-            supports_job_type=True,
-            supports_experience_level=True,
-            supports_posted_date=True,
-        )
+        # The current adapter only sends `count` and `tag` (keyword). It does
+        # NOT pass location, remote, job type, experience, posted-date, salary
+        # or pagination criteria upstream, so all filter capabilities are
+        # reported as unsupported. (Jobicy returns remote-style listings, but
+        # the adapter never requests a `remote` criterion explicitly.)
+        return ProviderCapabilities()
 
-    def fetch(self, queries: list[str], locations: list[str] | None = None, **kwargs) -> list[NormalizedJob]:
+    def fetch(self, criteria: SearchCriteria) -> list[NormalizedJob]:
         timeout = get_settings().JOBICY_TIMEOUT_SECONDS
         jobs: list[NormalizedJob] = []
         source_errors: list[str] = []
 
-        for query in queries[:2]:
+        for query in criteria.queries[:2]:
             try:
                 fetched = self._search(query, timeout)
                 jobs.extend(fetched)
