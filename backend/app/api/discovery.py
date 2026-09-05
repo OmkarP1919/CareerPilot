@@ -49,19 +49,38 @@ def list_sources(user: User = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 
 
+def _build_saved_search_response(saved) -> SavedSearchResponse:
+    """Build a SavedSearchResponse from the ORM row.
+
+    SavedSearch.criteria and SavedSearch.last_seen_keys are stored as JSON text;
+    the API contract exposes them as strongly typed fields (criteria dict /
+    last_seen_count int). Parse the JSON before constructing the response so
+    Pydantic never validates the raw string.
+    """
+    criteria = discovery_service._safe_json_loads(saved.criteria, {})
+    if not isinstance(criteria, dict):
+        criteria = {}
+    last_seen_keys = discovery_service._safe_json_loads(saved.last_seen_keys, []) or []
+    if not isinstance(last_seen_keys, list):
+        last_seen_keys = []
+    return SavedSearchResponse(
+        id=saved.id,
+        name=saved.name,
+        criteria=criteria,
+        last_run_at=saved.last_run_at,
+        last_seen_count=len(last_seen_keys),
+        created_at=saved.created_at,
+        updated_at=saved.updated_at,
+    )
+
+
 @router.get("/saved-searches", response_model=list[SavedSearchResponse])
 def list_saved_searches(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     saved = discovery_service.list_saved_searches(user.id, db)
-    out = []
-    for s in saved:
-        item = SavedSearchResponse.model_validate(s)
-        item.criteria = discovery_service._safe_json_loads(s.criteria, {})
-        item.last_seen_count = len(discovery_service._safe_json_loads(s.last_seen_keys, []) or [])
-        out.append(item)
-    return out
+    return [_build_saved_search_response(s) for s in saved]
 
 
 @router.post("/saved-searches", response_model=SavedSearchResponse, status_code=201)
@@ -71,10 +90,7 @@ def create_saved_search(
     db: Session = Depends(get_db),
 ):
     saved = discovery_service.create_saved_search(user.id, db, data.name, data.criteria)
-    item = SavedSearchResponse.model_validate(saved)
-    item.criteria = discovery_service._safe_json_loads(saved.criteria, {})
-    item.last_seen_count = len(discovery_service._safe_json_loads(saved.last_seen_keys, []) or [])
-    return item
+    return _build_saved_search_response(saved)
 
 
 @router.post("/saved-searches/{search_id}/run", response_model=SavedSearchRunResponse)
@@ -95,12 +111,9 @@ def run_saved_search(
         raise HTTPException(status_code=404, detail="Saved search not found")
 
     saved = result["saved_search"]
-    item = SavedSearchResponse.model_validate(saved)
-    item.criteria = discovery_service._safe_json_loads(saved.criteria, {})
-    item.last_seen_count = len(discovery_service._safe_json_loads(saved.last_seen_keys, []) or [])
 
     return SavedSearchRunResponse(
-        saved_search=item,
+        saved_search=_build_saved_search_response(saved),
         report=result["report"],
         new_results=result["new_results"],
     )
@@ -118,10 +131,7 @@ def update_saved_search(
     )
     if saved is None:
         raise HTTPException(status_code=404, detail="Saved search not found")
-    item = SavedSearchResponse.model_validate(saved)
-    item.criteria = discovery_service._safe_json_loads(saved.criteria, {})
-    item.last_seen_count = len(discovery_service._safe_json_loads(saved.last_seen_keys, []) or [])
-    return item
+    return _build_saved_search_response(saved)
 
 
 @router.delete("/saved-searches/{search_id}", status_code=204)
