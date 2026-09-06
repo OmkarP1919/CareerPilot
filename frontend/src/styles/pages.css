@@ -3247,3 +3247,454 @@ html[data-theme="dark"] .toggle-switch-btn {
   display: flex;
   gap: 4px;
 }
+
+/* ================================================
+   PHASE 5D — APPLICATION PIPELINE DETAIL UX
+   ================================================ */
+
+.detail-tabs {
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.pipeline-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.pipeline-inline-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-secondary);
+}
+
+.pipeline-inline-empty svg {
+  color: var(--text-quaternary);
+}
+
+.pipeline-timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pipeline-timeline-item {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pipeline-timeline-item:last-child {
+  border-bottom: none;
+}
+
+.tl-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  margin-top: 5px;
+  background: var(--slate-300);
+}
+
+.tl-dot-event {
+  background: var(--accent);
+}
+
+.tl-dot-interview {
+  background: var(--purple);
+}
+
+.tl-dot-document {
+  background: var(--info);
+}
+
+.tl-content {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.tl-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tl-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.tl-notes {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.tl-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.tl-time {
+  flex: 0 0 auto;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.pipeline-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pipeline-inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-secondary);
+}
+
+.pipeline-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.pipeline-cards-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pipeline-card-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.pipeline-card-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.pipeline-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pipeline-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.pipeline-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.pipeline-card-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.pipeline-block-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Interview status badges */
+.status-badge.status-scheduled {
+  background: var(--accent-light);
+  color: var(--accent-800);
+  border: 1px solid var(--accent-border);
+}
+
+.status-badge.status-completed {
+  background: var(--success-light);
+  color: var(--success-dark);
+  border: 1px solid var(--success-border);
+}
+
+.status-badge.status-cancelled {
+  background: var(--bg-surface-secondary);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+}
+
+.status-badge.status-rescheduled {
+  background: var(--warning-light);
+  color: var(--warning-dark);
+  border: 1px solid var(--warning-border);
+}
+
+.status-badge.status-no_show {
+  background: var(--danger-light);
+  color: var(--danger-dark);
+  border: 1px solid var(--danger-border);
+}
+
+@media (max-width: 720px) {
+  .pipeline-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tl-content {
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+}
+
+/* ================================================
+   PHASE 5D — ANALYTICS (RESPONSIVE, REAL DATA ONLY)
+   ================================================ */
+
+.trust-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.trust-note svg {
+  color: var(--accent);
+}
+
+.insights-stats-card {
+  margin-bottom: var(--space-4);
+}
+
+.insights-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.insights-stat {
+  flex: 1;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-secondary);
+  border: 1px solid var(--border);
+}
+
+.insights-stat-value {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+}
+
+.insights-stat-label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.insights-stat-note {
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+}
+
+.activity-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.card-header-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.card-header-title h3 {
+  margin: 0 0 2px;
+}
+
+.velocity-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-secondary);
+}
+
+.velocity-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+.velocity-value {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  color: var(--accent);
+}
+
+.velocity-unit {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-tertiary);
+}
+
+.velocity-sample {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.velocity-none {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.activity-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.legend-swatch.events {
+  background: var(--accent);
+}
+
+.legend-swatch.applications {
+  background: var(--info);
+}
+
+.legend-swatch.interviews {
+  background: var(--purple);
+}
+
+.legend-swatch.documents {
+  background: var(--success);
+}
+
+.activity-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: var(--space-2);
+}
+
+.activity-week {
+  display: grid;
+  grid-template-columns: 56px 1fr 40px;
+  align-items: end;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.activity-week-label {
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+}
+
+.activity-week-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 56px;
+}
+
+.activity-bar-wrap {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.activity-bar-fill {
+  width: 100%;
+  min-height: 2px;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  background: var(--slate-300);
+}
+
+.activity-bar-fill.events {
+  background: var(--accent);
+}
+
+.activity-bar-fill.applications {
+  background: var(--info);
+}
+
+.activity-bar-fill.interviews {
+  background: var(--purple);
+}
+
+.activity-bar-fill.documents {
+  background: var(--success);
+}
+
+.activity-week-count {
+  font-size: var(--text-xs);
+  text-align: right;
+  color: var(--text-secondary);
+}

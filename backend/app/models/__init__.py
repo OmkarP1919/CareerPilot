@@ -7,6 +7,9 @@ from app.models.resume_job_analysis import ResumeJobAnalysis
 from app.models.tailored_resume import TailoredResume
 from app.models.cover_letter import CoverLetter
 from app.models.application import Application
+from app.models.application_event import ApplicationEvent
+from app.models.application_interview import ApplicationInterview
+from app.models.application_document import ApplicationDocument
 from app.models.saved_search import SavedSearch
 
 __all__ = [
@@ -25,5 +28,8 @@ __all__ = [
     "TailoredResume",
     "CoverLetter",
     "Application",
+    "ApplicationEvent",
+    "ApplicationInterview",
+    "ApplicationDocument",
     "SavedSearch",
 ]

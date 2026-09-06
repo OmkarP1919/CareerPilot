@@ -190,6 +190,65 @@ export const api = {
     return this.delete(`/cover-letters/${id}`);
   },
 
+  getApplicationEvents(applicationId) {
+    return this.get(`/applications/${applicationId}/events`);
+  },
+
+  createApplicationEvent(applicationId, data) {
+    return this.post(`/applications/${applicationId}/events`, data);
+  },
+
+  getApplicationInterviews(applicationId) {
+    return this.get(`/applications/${applicationId}/interviews`);
+  },
+
+  createApplicationInterview(applicationId, data) {
+    return this.post(`/applications/${applicationId}/interviews`, data);
+  },
+
+  updateApplicationInterview(applicationId, interviewId, data) {
+    return this.put(`/applications/${applicationId}/interviews/${interviewId}`, data);
+  },
+
+  deleteApplicationInterview(applicationId, interviewId) {
+    return this.delete(`/applications/${applicationId}/interviews/${interviewId}`);
+  },
+
+  getApplicationDocuments(applicationId) {
+    return this.get(`/applications/${applicationId}/documents`);
+  },
+
+  attachApplicationDocument(applicationId, data) {
+    return this.post(`/applications/${applicationId}/documents`, data);
+  },
+
+  uploadApplicationDocument(applicationId, formData) {
+    return this.uploadFile(`/applications/${applicationId}/documents/upload`, formData);
+  },
+
+  deleteApplicationDocument(applicationId, documentId) {
+    return this.delete(`/applications/${applicationId}/documents/${documentId}`);
+  },
+
+  getApplicationTimeline(applicationId) {
+    return this.get(`/applications/${applicationId}/timeline`);
+  },
+
+  getAnalyticsActivity(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        query.set(key, value);
+      }
+    });
+    const qs = query.toString();
+    return this.get(`/analytics/activity${qs ? `?${qs}` : ""}`);
+  },
+
+  getAnalyticsVelocity() {
+    return this.get("/analytics/velocity");
+  },
+
   async downloadTailoredResume(id, format) {
     const token = await getToken();
     const headers = {};

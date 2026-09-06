@@ -16,6 +16,7 @@ from app.api.cover_letter import collection_router as cover_letter_collection_ro
 from app.api.applications import router as applications_router
 from app.api.analytics import router as analytics_router
 from app.database.base import Base, engine
+import app.models  # noqa: F401  (registers all models with Base.metadata for create_all)
 
 Base.metadata.create_all(bind=engine)
 
