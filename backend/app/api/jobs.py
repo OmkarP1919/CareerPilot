@@ -4,6 +4,7 @@ from sqlalchemy import or_
 import logging
 from app.database.base import get_db
 from app.dependencies.auth import get_current_user
+from app.core.rate_limit_deps import expensive_rate_limiter
 from app.models.user import User
 from app.models.job import Job
 from app.schemas.job import (
@@ -65,7 +66,7 @@ def create_job(
     return job
 
 
-@router.post("/discover", response_model=DiscoveryResponse)
+@router.post("/discover", response_model=DiscoveryResponse, dependencies=[Depends(expensive_rate_limiter)])
 def trigger_discovery(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -74,7 +75,7 @@ def trigger_discovery(
     return DiscoveryResponse(**result)
 
 
-@router.post("/discover/personalized", response_model=PersonalizedDiscoveryResponse)
+@router.post("/discover/personalized", response_model=PersonalizedDiscoveryResponse, dependencies=[Depends(expensive_rate_limiter)])
 def trigger_personalized_discovery(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

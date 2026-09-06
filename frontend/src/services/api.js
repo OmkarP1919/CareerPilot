@@ -1,6 +1,5 @@
 import { auth } from "../firebase";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+import { API_BASE_URL, joinApiUrl } from "./apiConfig";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DISCOVERY_TIMEOUT_MS = 90_000;
@@ -29,7 +28,7 @@ async function getToken() {
 }
 
 async function request(endpoint, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
-  const fullUrl = `${API_BASE_URL}${endpoint}`;
+  const fullUrl = joinApiUrl(API_BASE_URL, endpoint);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -257,7 +256,7 @@ export const api = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/resumes/tailored/${id}/export/${format}`,
+      joinApiUrl(API_BASE_URL, `/resumes/tailored/${id}/export/${format}`),
       { headers }
     );
 
@@ -294,7 +293,7 @@ export const api = {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(joinApiUrl(API_BASE_URL, endpoint), {
       method: "POST",
       headers,
       body: formData,

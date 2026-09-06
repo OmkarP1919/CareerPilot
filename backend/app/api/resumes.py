@@ -1,10 +1,12 @@
 import os
-import uuid
 import logging
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from app.database.base import get_db
 from app.dependencies.auth import get_current_user
+from app.core.rate_limit_deps import expensive_rate_limiter
+from app.core import storage
 from app.models.user import User
 from app.models.resume import Resume
 from app.schemas.resume import ResumeResponse, ResumeParsedResponse
@@ -14,8 +16,32 @@ logger = logging.getLogger("app.api.resumes")
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads")
+# Phase 5E.6 - storage is centralized in app.core.storage; UPLOAD_DIR is the
+# effective root (default = STORAGE_ROOT -> backend/uploads) and may be
+# patched by tests.
+UPLOAD_DIR = str(storage.storage_root())
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+_UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB stream chunks
+
+
+def _stream_upload(file: UploadFile, max_size: int, chunk_size: int):
+    """Return a zero-arg chunk reader that enforces ``max_size``.
+
+    Streams the upload in bounded pieces instead of buffering an arbitrarily
+    large body in memory. Raises ``ValueError`` when the cumulative size
+    exceeds ``max_size`` (cleanly aborting before the file is written).
+    """
+    total = 0
+
+    def _read():
+        nonlocal total
+        chunk = file.file.read(chunk_size)
+        total += len(chunk)
+        if total > max_size:
+            raise ValueError("File size must be less than 10MB")
+        return chunk
+
+    return _read
 
 
 def _get_own_resume(resume_id: str, user: User, db: Session) -> Resume:
@@ -41,26 +67,28 @@ async def upload_resume(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File size must be less than 10MB")
+    stored_name = storage.safe_stored_filename(".pdf")
+    try:
+        file_path = storage.write_upload_atomic(
+            user.id,
+            stored_name,
+            _stream_upload(file, max_size=MAX_FILE_SIZE, chunk_size=_UPLOAD_CHUNK_SIZE),
+            max_size=MAX_FILE_SIZE,
+            root=Path(UPLOAD_DIR),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OSError:
+        logger.error("Resume upload failed to write to disk user_id=%s", user.id)
+        raise HTTPException(status_code=500, detail="File upload failed")
 
-    user_dir = os.path.join(UPLOAD_DIR, user.id)
-    os.makedirs(user_dir, exist_ok=True)
-
-    file_id = str(uuid.uuid4())
-    filename = f"{file_id}.pdf"
-    file_path = os.path.join(user_dir, filename)
-
-    with open(file_path, "wb") as f:
-        f.write(content)
-
+    file_size = str(_os_path_size(file_path))
     resume = Resume(
         user_id=user.id,
-        filename=filename,
+        filename=stored_name,
         original_filename=file.filename,
         file_path=file_path,
-        file_size=str(len(content)),
+        file_size=file_size,
         is_master=False,
         parsing_status="pending",
     )
@@ -91,7 +119,7 @@ def get_parsed_resume(
     )
 
 
-@router.post("/{resume_id}/parse", response_model=ResumeParsedResponse)
+@router.post("/{resume_id}/parse", response_model=ResumeParsedResponse, dependencies=[Depends(expensive_rate_limiter)])
 def reparse_resume(
     resume_id: str,
     user: User = Depends(get_current_user),
@@ -135,6 +163,10 @@ def delete_resume(
 ):
     resume = _get_own_resume(resume_id, user, db)
 
+    # Capture the path before the delete: after commit the row is gone, so a
+    # post-commit attribute access would raise an expired-object error.
+    file_path = resume.file_path
+
     # Dependent records derived from this resume (ResumeJobAnalysis,
     # TailoredResume, CoverLetter) are removed via ORM cascade on the Resume
     # model. The commit is atomic: either the resume and all its directly
@@ -146,9 +178,12 @@ def delete_resume(
     # transaction never leaves the database pointing at a deleted file. This
     # step is best-effort: a leftover file on disk must never surface as an
     # error for an already-committed deletion.
-    if resume.file_path:
-        try:
-            if os.path.exists(resume.file_path):
-                os.remove(resume.file_path)
-        except OSError:
-            logger.warning("Could not remove resume file from disk after a committed deletion")
+    storage.delete_file_safely(user.id, file_path, root=Path(UPLOAD_DIR))
+
+
+def _os_path_size(path: str) -> int:
+    """Return the on-disk byte size of ``path`` (best-effort)."""
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0

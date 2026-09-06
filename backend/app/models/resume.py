@@ -46,3 +46,15 @@ class Resume(Base):
         back_populates="resume",
         cascade="all, delete-orphan",
     )
+    # ApplicationDocuments that reference this resume (source_resume_id). These
+    # are REFERENCE rows and never own the resume's file. cascade="all" is used
+    # deliberately (NOT "all, delete-orphan"): a document is already a
+    # delete-orphan child of its Application (Application.documents), and an
+    # instance cannot be a delete-orphan of two parents. The "delete" portion
+    # of the cascade removes the referencing rows before the resume DELETE, so
+    # the existing non-cascading database FK is satisfied without a migration.
+    application_documents = relationship(
+        "ApplicationDocument",
+        back_populates="source_resume",
+        cascade="all",
+    )

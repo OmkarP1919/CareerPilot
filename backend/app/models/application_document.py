@@ -61,4 +61,8 @@ class ApplicationDocument(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     application = relationship("Application", foreign_keys=[application_id], back_populates="documents")
-    source_resume = relationship("Resume", foreign_keys=[source_resume_id])
+    source_resume = relationship(
+        "Resume",
+        foreign_keys=[source_resume_id],
+        back_populates="application_documents",
+    )

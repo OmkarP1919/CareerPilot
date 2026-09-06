@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.api.health import router as health_router
 from app.api.auth import router as auth_router
 from app.api.profile import router as profile_router
@@ -15,10 +16,30 @@ from app.api.cover_letter import router as cover_letter_router
 from app.api.cover_letter import collection_router as cover_letter_collection_router
 from app.api.applications import router as applications_router
 from app.api.analytics import router as analytics_router
-from app.database.base import Base, engine
-import app.models  # noqa: F401  (registers all models with Base.metadata for create_all)
+from app.core.config import get_settings
+from app.core.logging_config import setup_logging
+from app.core.request_middleware import RequestLoggingMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
+from app.core.body_limit import RequestBodyLimitMiddleware
+from app.core.rate_limit_middleware import RateLimitMiddleware
+from app.core.rate_limit_deps import configure_rate_limits
 
-Base.metadata.create_all(bind=engine)
+# Initialize application logging early so startup failures are diagnosable.
+_settings = get_settings()
+setup_logging(_settings.LOG_LEVEL)
+
+# Schema initialization is an explicit release operation (python -m app.database.init),
+# NOT an import-time side effect. Application startup assumes the schema exists.
+#
+# Both allowed_cors_origins and allowed_trusted_hosts raise at import time in
+# a production-like environment when their respective variable is empty, so an
+# unsafe configuration fails fast at startup instead of silently shipping.
+
+_origins = _settings.allowed_cors_origins
+_trusted_hosts = _settings.allowed_trusted_hosts
+_hsts = _settings.hsts_enabled
+_max_body_bytes = _settings.MAX_REQUEST_BODY_BYTES
+_rate_limit = _settings.rate_limit_config
 
 app = FastAPI(
     title="CareerPilot AI",
@@ -26,12 +47,42 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# Middleware order (outermost -> innermost); add_middleware prepends, so these
+# are registered in reverse order:
+#
+#   1. CORS                   - unchanged 5E.1 behavior, outermost
+#   2. SecurityHeaders        - security headers on normal AND rejected responses
+#   3. RequestLogging         - request ID + log every non-health request
+#   4. TrustedHost            - reject unknown Host headers before routing
+#   5. RateLimit              - global anonymous/client-IP 429s BEFORE routing
+#   6. RequestBodyLimit       - reject oversized bodies before handlers consume
+#   7. application router
+#
+# RateLimit sits inside TrustedHost (bad Host rejected first, so rejected hosts
+# do not consume counters) and outside RequestBodyLimit (so a 429 response gets
+# the request-ID + security-header envelope from the outer middlewares).
+app.add_middleware(RequestBodyLimitMiddleware, max_bytes=_max_body_bytes)
+app.add_middleware(RateLimitMiddleware,
+                   enabled=_rate_limit["enabled"],
+                   anonymous_max=_rate_limit["anonymous_max"],
+                   window_seconds=_rate_limit["window_seconds"],
+                   max_keys=_rate_limit["max_keys"])
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
+app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(SecurityHeadersMiddleware, hsts_enabled=_hsts)
+app.add_middleware(CORSMiddleware,
+                   allow_origins=_origins,
+                   allow_credentials=True,
+                   allow_methods=["*"],
+                   allow_headers=["*"])
+
+# Configure the per-user (authenticated / expensive) rate-limit dependencies.
+configure_rate_limits(
+    enabled=_rate_limit["enabled"],
+    window_seconds=_rate_limit["window_seconds"],
+    authenticated_max=_rate_limit["authenticated_max"],
+    expensive_max=_rate_limit["expensive_max"],
+    max_keys=_rate_limit["max_keys"],
 )
 
 app.include_router(health_router)

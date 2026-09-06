@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database.base import get_db
 from app.dependencies.auth import get_current_user
+from app.core.rate_limit_deps import expensive_rate_limiter
 from app.models.user import User
 from app.models.job import Job
 from app.models.job_match import JobMatch
@@ -12,7 +13,7 @@ from app.services.matching import calculate_match
 router = APIRouter(prefix="/jobs", tags=["matching"])
 
 
-@router.post("/{job_id}/match", response_model=MatchResponse)
+@router.post("/{job_id}/match", response_model=MatchResponse, dependencies=[Depends(expensive_rate_limiter)])
 def match_job(
     job_id: str,
     user: User = Depends(get_current_user),

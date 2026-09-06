@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database.base import get_db
 from app.dependencies.auth import get_current_user
+from app.core.rate_limit_deps import expensive_rate_limiter
 from app.models.user import User
 from app.schemas.discovery import (
     DiscoveryReport,
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jobs/discovery", tags=["discovery"])
 
 
-@router.post("/filtered", response_model=DiscoveryReport)
+@router.post("/filtered", response_model=DiscoveryReport, dependencies=[Depends(expensive_rate_limiter)])
 def filtered_discovery(
     request: JobFilterRequest,
     user: User = Depends(get_current_user),
@@ -93,7 +94,7 @@ def create_saved_search(
     return _build_saved_search_response(saved)
 
 
-@router.post("/saved-searches/{search_id}/run", response_model=SavedSearchRunResponse)
+@router.post("/saved-searches/{search_id}/run", response_model=SavedSearchRunResponse, dependencies=[Depends(expensive_rate_limiter)])
 def run_saved_search(
     search_id: str,
     user: User = Depends(get_current_user),

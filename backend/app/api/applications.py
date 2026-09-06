@@ -1,12 +1,14 @@
 import os
-import uuid
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from app.database.base import get_db
 from app.dependencies.auth import get_current_user
+from app.core.rate_limit_deps import expensive_rate_limiter
+from app.core import storage
 from app.models.user import User
 from app.models.job import Job
 from app.models.resume import Resume
@@ -43,9 +45,30 @@ STATUSES = ["Saved", "Preparing", "Applied", "Assessment", "Interview", "Offer",
 # convention (see app.api.resumes): physical files live under
 # backend/uploads/{user_id}/, the size limit matches the Resume upload limit,
 # and only document formats already native to the project are accepted.
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads")
+# Phase 5E.6 - the storage root is configurable (STORAGE_ROOT); this module
+# keeps UPLOAD_DIR as its effective root (default = storage_root()) so
+# hardened storage operations stay centralized in app.core.storage.
+UPLOAD_DIR = str(storage.storage_root())
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB, matches the Resume upload limit
 ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".docx"}
+_UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB stream chunks
+
+
+def _sanitize_original_filename(raw: str | None) -> str:
+    """Return a display-safe basename for an uploaded file.
+
+    The original filename is preserved only as metadata/display; it is never
+    used as a filesystem path. Both separator styles are collapsed first so
+    ``../``/absolute paths reduce to a bare basename, then control characters
+    and a leading run of dots are stripped.
+    """
+    if not raw:
+        return ""
+    base = raw.replace("\\", "/").rsplit("/", 1)[-1]
+    if base in ("", ".", ".."):
+        return ""
+    base = base.lstrip(".").lstrip()
+    return storage.sanitize_name(base)
 
 
 def _get_own_application(app_id: str, user: User, db: Session) -> Application:
@@ -287,11 +310,7 @@ def delete_application(
     db.commit()
 
     for file_path in uploaded_file_paths:
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except OSError:
-            logger.warning("Could not remove application document file from disk after application deletion")
+        storage.delete_file_safely(user.id, file_path, root=Path(UPLOAD_DIR))
 
 
 # ---------------------------------------------------------------------------
@@ -516,7 +535,7 @@ def attach_application_document(
     return ApplicationDocumentResponse.model_validate(document)
 
 
-@router.post("/{app_id}/documents/upload", response_model=ApplicationDocumentResponse, status_code=201)
+@router.post("/{app_id}/documents/upload", response_model=ApplicationDocumentResponse, status_code=201, dependencies=[Depends(expensive_rate_limiter)])
 async def upload_application_document(
     app_id: str,
     file: UploadFile = File(...),
@@ -534,9 +553,10 @@ async def upload_application_document(
     if not file.filename:
         raise HTTPException(status_code=400, detail="A file is required")
 
-    # Never trust a client-supplied path: only the basename is ever used, and a
-    # regenerated server-side uuid filename is what actually hits the disk.
-    original_filename = os.path.basename(file.filename.replace("\\", "/"))
+    # The original filename is display metadata only; the extension is derived
+    # from the validated allow-listed set, and the stored name is a server-side
+    # UUID. The client-supplied name can never become a filesystem path.
+    original_filename = _sanitize_original_filename(file.filename)
     ext = os.path.splitext(original_filename)[1].lower()
     if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
         raise HTTPException(
@@ -544,34 +564,67 @@ async def upload_application_document(
             detail=f"Only {', '.join(sorted(ALLOWED_DOCUMENT_EXTENSIONS))} files are allowed",
         )
 
-    content = await file.read()
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=400, detail="File size must be less than 10MB")
+    stored_name = storage.safe_stored_filename(ext)
+    try:
+        file_path = storage.write_upload_atomic(
+            user.id,
+            stored_name,
+            _stream_upload(file, max_size=MAX_UPLOAD_SIZE, chunk_size=_UPLOAD_CHUNK_SIZE),
+            max_size=MAX_UPLOAD_SIZE,
+            root=Path(UPLOAD_DIR),
+        )
+    except ValueError as exc:
+        # Oversized (or otherwise invalid) upload: the temp file is already
+        # cleaned up by the storage utility - no partial final file remains.
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OSError:
+        logger.error("Application-document upload failed to write to disk user_id=%s", user.id)
+        raise HTTPException(status_code=500, detail="File upload failed")
 
-    user_dir = os.path.join(UPLOAD_DIR, user.id)
-    os.makedirs(user_dir, exist_ok=True)
-
-    file_id = str(uuid.uuid4())
-    filename = f"{file_id}{ext}"
-    file_path = os.path.join(user_dir, filename)
-
-    with open(file_path, "wb") as f:
-        f.write(content)
-
+    file_size = str(_os_path_size(file_path))
     document = ApplicationDocument(
         application_id=application.id,
         user_id=user.id,
         document_type=doc_type,
         name=name,
-        filename=filename,
+        filename=stored_name,
         original_filename=original_filename,
         file_path=file_path,
-        file_size=str(len(content)),
+        file_size=file_size,
     )
     db.add(document)
     db.commit()
     db.refresh(document)
     return ApplicationDocumentResponse.model_validate(document)
+
+
+def _stream_upload(file: UploadFile, max_size: int, chunk_size: int):
+    """Return a zero-arg chunk reader that enforces ``max_size``.
+
+    Reads the multipart body in bounded ``chunk_size`` pieces instead of
+    buffering an arbitrarily large upload in memory. Raises ``ValueError``
+    when the cumulative size exceeds ``max_size`` (cleanly aborting the
+    stream before it is fully buffered).
+    """
+    total = 0
+
+    def _read():
+        nonlocal total
+        chunk = file.file.read(chunk_size)
+        total += len(chunk)
+        if total > max_size:
+            raise ValueError("File size must be less than 10MB")
+        return chunk
+
+    return _read
+
+
+def _os_path_size(path: str) -> int:
+    """Return the on-disk byte size of ``path`` (best-effort)."""
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
 
 
 @router.delete("/{app_id}/documents/{document_id}", status_code=204)
@@ -604,11 +657,7 @@ def delete_application_document(
     db.commit()
 
     if remove_physical_file:
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except OSError:
-            logger.warning("Could not remove application document file from disk after a committed deletion")
+        storage.delete_file_safely(user.id, file_path, root=Path(UPLOAD_DIR))
 
 
 # ---------------------------------------------------------------------------

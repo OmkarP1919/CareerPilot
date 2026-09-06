@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.database.base import get_db
 from app.dependencies.auth import get_current_user
+from app.core.rate_limit_deps import expensive_rate_limiter
 from app.models.user import User
 from app.models.job import Job
 from app.models.resume import Resume
@@ -181,7 +182,7 @@ def _to_response(t: TailoredResume, resume: Optional[Resume] = None) -> TailorRe
     )
 
 
-@router.post("/{job_id}/resume-tailor", response_model=TailorResumeResponse)
+@router.post("/{job_id}/resume-tailor", response_model=TailorResumeResponse, dependencies=[Depends(expensive_rate_limiter)])
 def tailor_resume(
     job_id: str,
     body: TailorResumeRequest,
