@@ -473,14 +473,29 @@ class TestMultiUserIntegrationAndRanking(unittest.TestCase):
         self.assertNotIn("HTTP 503", error_text)
 
 
+class _FakeAdzunaSettings:
+    """Deterministic Adzuna settings for tests: no real credentials, fast,
+    self-contained. Never read from the environment or .env."""
+
+    ADZUNA_APP_ID = "test-app-id"
+    ADZUNA_APP_KEY = "test-app-key"
+    ADZUNA_TIMEOUT_SECONDS = 0.5
+    ADZUNA_COUNTRY = "us"
+
+
 class TestSourceReliability(unittest.TestCase):
     """AdzunaSource / JobicySource must bound every external request and raise
     controlled SourceUnavailableError instead of hanging or leaking provider data."""
 
+    @patch("app.services.job_sources.adzuna.get_settings")
     @patch("app.services.job_sources.adzuna.httpx.get")
-    def test_adzuna_timeout_raises_controlled_error(self, mock_get):
+    def test_adzuna_timeout_raises_controlled_error(self, mock_get, mock_settings):
         from app.services.job_sources.adzuna import AdzunaSource
 
+        # Without fake credentials AdzunaSource.fetch() returns [] before ever
+        # issuing an HTTP request; supplying deterministic fake settings makes
+        # the mocked call below reachable and the test self-contained.
+        mock_settings.return_value = _FakeAdzunaSettings()
         mock_get.side_effect = httpx.TimeoutException("timeout")
         with self.assertRaises(SourceUnavailableError) as ctx:
             AdzunaSource().fetch(SearchCriteria(queries=["Python Developer"], locations=["Pune"], country="in"))
@@ -488,10 +503,12 @@ class TestSourceReliability(unittest.TestCase):
         self.assertIn("Adzuna", message)
         self.assertNotIn("timeout", message.lower().replace("timed out", ""))
 
+    @patch("app.services.job_sources.adzuna.get_settings")
     @patch("app.services.job_sources.adzuna.httpx.get")
-    def test_adzuna_http_429_maps_to_controlled_error(self, mock_get):
+    def test_adzuna_http_429_maps_to_controlled_error(self, mock_get, mock_settings):
         from app.services.job_sources.adzuna import AdzunaSource
 
+        mock_settings.return_value = _FakeAdzunaSettings()
         response = httpx.Response(429, request=httpx.Request("GET", "https://api.adzuna.com"))
         mock_get.return_value = response
         with self.assertRaises(SourceUnavailableError) as ctx:

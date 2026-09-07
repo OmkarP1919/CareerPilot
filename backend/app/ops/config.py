@@ -160,6 +160,12 @@ def resolve_backup_path(backup_dir: Path, user_input: str | None) -> Path:
     raw = (user_input or "").strip()
     if not raw:
         raise BackupError("a backup file path is required")
+    if "\\" in raw:
+        # Backslash is a path separator on Windows but a literal filename
+        # character on POSIX. Rejecting it here stops Windows-style traversal
+        # ("..\\escape.dump") from bypassing containment on Linux without
+        # weakening the resolve-then-contain check below.
+        raise BackupError(f"backup path must not contain backslashes: {raw!r}")
     candidate = Path(raw)
     if candidate.is_absolute():
         resolved = candidate.resolve()

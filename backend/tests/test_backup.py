@@ -135,6 +135,21 @@ class ConfigAndNamingTests(unittest.TestCase):
                 resolve_backup_path(base, f"sub/{name}"), (base / "sub" / name).resolve()
             )
 
+    def test_symlink_escape_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            outside = Path(tempfile.gettempdir()) / "careerpilot_outside_link_target"
+            outside.mkdir(exist_ok=True)
+            link = base / "careerpilot_escape_link_20260907-000000Z.dump"
+            try:
+                link.symlink_to(outside, target_is_directory=True)
+            except OSError:
+                outside.rmdir()
+                self.skipTest("symlinks not permitted on this platform/filesystem")
+            with self.assertRaises(BackupError):
+                resolve_backup_path(base, link.name)
+            outside.rmdir()
+
 
 class CommandConstructionTests(unittest.TestCase):
     def test_pg_dump_command(self):

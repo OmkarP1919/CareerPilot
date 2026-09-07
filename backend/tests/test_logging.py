@@ -9,6 +9,7 @@ import logging
 import os
 import tempfile
 import unittest
+from unittest import mock
 from unittest.mock import patch
 
 from fastapi import FastAPI, HTTPException
@@ -231,13 +232,31 @@ class TestRequestContextIsolation(unittest.TestCase):
 
 class TestHealthUnauthenticated(unittest.TestCase):
     def test_j_health_endpoints_remain_unauthenticated_and_functional(self):
+        from app.api import health as health_module
+
+        class _HealthyConnection:
+            """Duck-typed engine.connect() result: SELECT 1 succeeds."""
+
+            def execute(self, statement):
+                return iter([(1,)])
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
         app, client = _make_app()
-        # No Authorization header sent; all must return 200 (health is
-        # unauthenticated by design).
-        for path in ("/healthz", "/health", "/health/readyz"):
-            resp = client.get(path)
-            self.assertEqual(resp.status_code, 200, path)
-            self.assertIn("status", resp.json())
+        # Readiness probes the configured database engine; pin that probe so
+        # this unit test is deterministic on any machine/CI run (SELECT 1
+        # deliberately "succeeds") and never depends on a live database.
+        with mock.patch.object(
+            health_module.engine, "connect", return_value=_HealthyConnection()
+        ):
+            for path in ("/healthz", "/health", "/health/readyz"):
+                resp = client.get(path)
+                self.assertEqual(resp.status_code, 200, path)
+                self.assertIn("status", resp.json())
 
 
 class TestRequestIdUtility(unittest.TestCase):
