@@ -1,12 +1,17 @@
 # CareerPilot CI/CD
 
 Phase 5E.12 lays the CI foundation for the repository.
+Phase 5E.13 adds the repeatable release smoke harness (section 11).
 
 - **Status:** validation only. CI never deploys the application, publishes
   artifacts, or connects to production databases/credentials.
 - **Trigger policy:** CI runs on every pull request targeting `main` and on
   every push to `main`. There are no scheduled jobs, no deployment triggers,
-  and no release automation (release smoke testing arrives in phase 5E.13).
+  and no release automation. The release smoke harness (section 11) is a
+  repeatable, deterministic, offline-by-default pre-deployment gate that ships
+  alongside CI; it is NOT wired into the PR/push workflow because it needs no
+  secrets and is intended to be run as the final step of a release, either
+  locally or in a deploy job.
 
 ## 1. What CI checks
 
@@ -211,3 +216,84 @@ resolve: remove the secret, rotate it if it ever left the machine, and re-push.
 - No deployment, no releases, no scheduled runs, no production access.
 - No repository secrets are read by CI.
 - Protected Resume Parsing 2.0 files are guarded, never modified by CI scripts.
+
+## 11. Release smoke harness (5E.13)
+
+`backend/scripts/release_smoke.py` is a **repeatable release gate** that
+exercises the behaviors a deployment depends on, deterministically and offline
+by default, without touching production resources or read credentials. It is
+distinct from the `unittest` suite: the suite proves regression behavior; the
+harness proves the process can start, route, enforce its security contract, and
+carry out the core release-facing workflows.
+
+Run it from the backend directory:
+
+```powershell
+python -m scripts.release_smoke            # default: offline, deterministic
+python -m scripts.release_smoke --json     # machine-readable report
+python -m scripts.release_smoke --fail-fast  # stop at the first FAIL
+python -m scripts.release_smoke --frontend-build  # also runs `npm run build`
+python -m scripts.release_smoke --pg       # enable live-PostgreSQL gated checks
+```
+
+Design rules:
+
+- **Deterministic & offline for checks A-N.** External job providers run in
+  their credentials-absent mode or are replaced by in-process fakes; the
+  database is an isolated temp SQLite instance (or mocked); no network is used.
+- **Statuses are honest.** Every check returns `PASS`, `SKIP`, or `FAIL`. A
+  `SKIP` (never a fake `PASS`) is used only for environment-gated checks and
+  never blocks a release. An exception inside a check is a `FAIL`, never a
+  silent pass. Any `FAIL` fails the gate.
+- **Exit codes:** `0` = gate PASS (skips allowed), `1` = required check FAIL,
+  `2` = usage error.
+- The current checks and what they verify:
+
+  | Check | Verifies |
+  | ----- | -------- |
+  | A | Backend bootstrap: every router mounts, routes resolve, liveness works |
+  | B | Health endpoints: liveness, compat alias, simulated readiness 200/503 |
+  | C | Production config fails fast on unsafe CORS / TRUSTED_HOSTS; HSTS opt-in |
+  | D | HTTP security headers, 413 handling, TrustedHost rejection, request IDs |
+  | E | 401 without/invalid credentials; idempotent first-login provisioning |
+  | F | Client-IP rate-limit middleware + per-user expensive-route 429 |
+  | G | Job discovery: orchestrator failure isolation, cross-source dedup, Adzuna no-creds |
+  | H | Saved searches: create/list/update/run/delete |
+  | I | Application pipeline: create, events, interviews, docs (ref + upload), timeline, delete |
+  | J | Storage safety: path containment, atomic size-safe writes, safe deletion |
+  | K | Analytics: truthful, user-scoped aggregations |
+  | L | Backup & recovery ops: naming, listing, retention, path confinement |
+  | M | Frontend build contract: static contract (FAILs on any problem); + optional real `npm run build` |
+  | N | Repository integrity: `git diff --check`, protected-file HEAD baselines, secret scan |
+  | PG.1 | Live PostgreSQL readiness (`SELECT 1`) |
+  | PG.2 | Live `pg_dump` backup creation + checksum verification (no `pg_restore`) |
+
+- **Protected-file check (N)** compares each protected path's **committed HEAD
+  blob** (`git rev-parse HEAD:<path>`) against the pinned baseline in
+  `PROTECTED_FILES_AT_HEAD`. It never reads or modifies the files, so a local
+  working tree with uncommitted edits still passes as long as the committed
+  content is the baseline. This is the same protection policy as section 6,
+  checked at release time rather than per-PR.
+- **Check N runs from a committed release candidate.** `git diff --check`
+  inspects the working tree relative to the index and the protected-file check
+  reads the committed `HEAD` blobs; **untracked implementation files are not
+  considered part of the release candidate**. Run the gate from a committed
+  candidate (or after staging the change range) so the repository-integrity
+  check reflects exactly what will be released.
+- **Check M honesty.** The static frontend contract is validated on every run:
+  any static problem yields `FAIL` whether or not `--frontend-build` was passed.
+  `--frontend-build` additionally shells out to `npm run build`; if npm is
+  unavailable on `PATH` in that mode, M reports `SKIP` (the static contract was
+  still validated).
+- **Live PostgreSQL (PG.1/PG.2)** is off by default and never faked. They are
+  gated on `--pg` **and** `POSTGRES_TEST_DATABASE_URL` (PG.2 also needs
+  `pg_dump` on `PATH`). Otherwise they report `SKIP` with the reason.
+  PG.2 verifies `pg_dump` creation + checksum sidecar + backup listing; it does
+  **not** perform a `pg_restore`.
+
+The harness is intentionally stdlib + already-pinned dependencies only
+(fastapi, pydantic-settings, sqlalchemy, httpx) so it runs in the same
+environment as the backend service. Add a contract check to `CHECKS` in
+`backend/scripts/release_smoke.py` whenever a new deploy-dependent contract is
+introduced; harness behavior is covered by
+`backend/tests/test_release_smoke.py`.
