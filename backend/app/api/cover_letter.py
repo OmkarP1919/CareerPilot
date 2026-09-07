@@ -11,6 +11,8 @@ explicitly requested; it reuses an existing generation for the same
 enforced on every access.
 """
 
+from typing import Optional
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status

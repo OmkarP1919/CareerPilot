@@ -8,6 +8,8 @@ AI call unless explicitly requested, and it reuses an existing tailoring for the
 same (user, resume, job) instead of generating an uncontrolled duplicate.
 """
 
+from typing import Optional
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
