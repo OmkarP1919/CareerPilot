@@ -186,6 +186,16 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ---
 
+## Continuous Integration
+
+GitHub Actions validates every pull request and push to `main`:
+backend tests (Python 3.12), frontend tests/build/lint (Node 22 LTS), a
+protected-file regression guard, and a credential-shaped content scan.
+See [docs/ci_cd.md](docs/ci_cd.md) for the full design, local parity commands,
+and failure investigation.
+
+---
+
 ## Current Development Status
 
 The platform is actively in active development.

@@ -1,0 +1,114 @@
+# CareerPilot CI (Phase 5E.12)
+#
+# Runs on every pull request targeting `main` and every push to `main`.
+# Three independent jobs run in parallel:
+#
+#   backend            - Python 3.12, pinned requirements, full unittest suite
+#   frontend           - Node 22 LTS, lockfile-driven npm ci, tests + build + lint
+#   repository-security - whitespace, protected-file regression guard, secret scan
+#
+# Security posture (see docs/ci_cd.md):
+#   - contents: read ONLY. No job needs write permissions.
+#   - No repository secrets are used anywhere in this workflow; CI therefore
+#     never exposes secrets to untrusted fork PRs.
+#   - Third-party actions are pinned to commit SHAs (verified against the
+#     published v4/v5 tags on 2026-09-07).
+#   - This workflow performs validation only. It never deploys, publishes,
+#     or connects to any production resource.
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Python 3.12)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check Python syntax
+        run: python -m compileall -q app
+      - name: Run backend test suite
+        env:
+          # The full unit suite runs on SQLite with no external services.
+          # PostgreSQL round-trip tests skip themselves when this variable is
+          # empty (see backend/tests and docs/ci_cd.md).
+          POSTGRES_TEST_DATABASE_URL: ""
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+  frontend:
+    name: Frontend (Node 22 LTS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Run frontend contract tests
+        run: npm test
+      - name: Build production bundle
+        env:
+          # Build-validation only. vite.config.js fails a production build when
+          # VITE_API_BASE_URL is absent; this value is the documented CI/shared
+          # placeholder (mirrors frontend/.env.example). The bundle produced here
+          # is a throwaway artifact of the check - it is never deployed.
+          VITE_API_BASE_URL: "https://api.careerpilot.app"
+        run: npm run build
+      - name: Lint
+        run: npm run lint
+
+  repository-security:
+    name: Repository integrity and secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (full history for diff ranges)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Whitespace and protected-file regression guard
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="${{ github.event.pull_request.base.sha }}...HEAD"
+          else
+            RANGE="${{ github.event.before }}..HEAD"
+          fi
+          bash scripts/check_ci_scope.sh "$RANGE"
+      - name: Secret scan
+        run: python scripts/scan_repo_secrets.py
