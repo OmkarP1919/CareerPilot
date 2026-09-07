@@ -165,6 +165,17 @@ class Settings(BaseSettings):
     RATE_LIMIT_TRUST_PROXY: bool = False      # unused until proxy-header parsing added
 
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/careerpilot"
+
+    # ── Backup & recovery (Phase 5E.11) ─────────────────────────────────────
+    # Directory that stores pg_dump archives and their SHA-256 sidecars.
+    # Empty -> the project-local default backend/backups. Production deployments
+    # must point BACKUP_DIR at a dedicated volume that is itself backed up
+    # off-host (see backend/docs/backup_recovery.md).
+    BACKUP_DIR: str = ""
+    # Number of newest valid backups to retain. Older archives are pruned by
+    # `python -m app.ops.backup cleanup`. Must be >= 1.
+    BACKUP_RETENTION_COUNT: int = 30
+
     FIREBASE_PROJECT_ID: str = ""
     ADZUNA_APP_ID: str = ""
     ADZUNA_APP_KEY: str = ""
