@@ -7,6 +7,11 @@ from app.dependencies.auth import get_current_user
 from app.core.rate_limit_deps import expensive_rate_limiter
 from app.models.user import User
 from app.models.job import Job
+from app.models.application import Application
+from app.models.job_match import JobMatch
+from app.models.resume_job_analysis import ResumeJobAnalysis
+from app.models.tailored_resume import TailoredResume
+from app.models.cover_letter import CoverLetter
 from app.schemas.job import (
     JobCreate,
     JobUpdate,
@@ -31,7 +36,9 @@ def list_jobs(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Job)
+    # Jobs are saved per-user: a client must never see another user's saved
+    # jobs through the list endpoint, even when search/filter terms match.
+    query = db.query(Job).filter(Job.user_id == user.id)
 
     if search:
         search_term = f"%{search}%"
@@ -125,7 +132,7 @@ def get_job(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    job = db.query(Job).filter(Job.id == job_id).first()
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
@@ -149,6 +156,45 @@ def update_job(
     return job
 
 
+_JOB_DEPENDENT_MODELS = (
+    (Application, "applications"),
+    (JobMatch, "job_matches"),
+    (ResumeJobAnalysis, "resume_job_analyses"),
+    (TailoredResume, "tailored_resumes"),
+    (CoverLetter, "cover_letters"),
+)
+
+
+def _ensure_job_deletable(job_id: str, db: Session) -> None:
+    """Refuse to delete a job that user data still references.
+
+    A saved job can be referenced by user application history (applications),
+    match scores (job_matches) and AI-derived artifacts (resume_job_analyses,
+    tailored_resumes, cover_letters). PostgreSQL enforces these foreign keys,
+    so deleting a referenced row raises a ForeignKeyViolation (a 500); SQLite
+    silently ignores the FK - which is exactly the divergence this guard
+    closes. The safe, deterministic behavior on both engines is to reject the
+    deletion with a 409 until the user removes the dependent rows themselves.
+
+    Critically, applications are user application history and are NEVER
+    cascade-deleted when a saved job is removed: the owner must delete the
+    application explicitly first.
+    """
+    referenced = [
+        label
+        for model, label in _JOB_DEPENDENT_MODELS
+        if db.query(model).filter(model.job_id == job_id).first() is not None
+    ]
+    if referenced:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Job cannot be deleted because it is referenced by: "
+                + ", ".join(referenced) + "."
+            ),
+        )
+
+
 @router.delete("/{job_id}", status_code=204)
 def delete_job(
     job_id: str,
@@ -158,5 +204,6 @@ def delete_job(
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    _ensure_job_deletable(job.id, db)
     db.delete(job)
     db.commit()
