@@ -22,6 +22,7 @@ from app.core.request_middleware import RequestLoggingMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.body_limit import RequestBodyLimitMiddleware
 from app.core.rate_limit_middleware import RateLimitMiddleware
+from app.core.proxy_headers import ProxyHeadersMiddleware
 from app.core.rate_limit_deps import configure_rate_limits
 
 # Initialize application logging early so startup failures are diagnosable.
@@ -52,15 +53,19 @@ app = FastAPI(
 #
 #   1. CORS                   - unchanged 5E.1 behavior, outermost
 #   2. SecurityHeaders        - security headers on normal AND rejected responses
-#   3. RequestLogging         - request ID + log every non-health request
-#   4. TrustedHost            - reject unknown Host headers before routing
-#   5. RateLimit              - global anonymous/client-IP 429s BEFORE routing
-#   6. RequestBodyLimit       - reject oversized bodies before handlers consume
-#   7. application router
+#   3. ProxyHeaders           - trust X-Forwarded-Proto from configured proxy IPs
+#   4. RequestLogging         - request ID + log every non-health request
+#   5. TrustedHost            - reject unknown Host headers before routing
+#   6. RateLimit              - global anonymous/client-IP 429s BEFORE routing
+#   7. RequestBodyLimit       - reject oversized bodies before handlers consume
+#   8. application router
 #
 # RateLimit sits inside TrustedHost (bad Host rejected first, so rejected hosts
 # do not consume counters) and outside RequestBodyLimit (so a 429 response gets
 # the request-ID + security-header envelope from the outer middlewares).
+#
+# ProxyHeaders runs before RequestLogging so the logged scheme is correct, and
+# before TrustedHost so any downstream middleware sees the original scheme.
 app.add_middleware(RequestBodyLimitMiddleware, max_bytes=_max_body_bytes)
 app.add_middleware(RateLimitMiddleware,
                    enabled=_rate_limit["enabled"],
@@ -69,6 +74,7 @@ app.add_middleware(RateLimitMiddleware,
                    max_keys=_rate_limit["max_keys"])
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(ProxyHeadersMiddleware, allowed_ips=_settings.allowed_forwarded_ips)
 app.add_middleware(SecurityHeadersMiddleware, hsts_enabled=_hsts)
 app.add_middleware(CORSMiddleware,
                    allow_origins=_origins,

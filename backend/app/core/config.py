@@ -164,6 +164,13 @@ class Settings(BaseSettings):
     RATE_LIMIT_MAX_KEYS: int = 20_000         # memory backend cap
     RATE_LIMIT_TRUST_PROXY: bool = False      # unused until proxy-header parsing added
 
+    # ── Reverse-proxy forwarded-header trust ──────────────────────────────────
+    # Comma-separated list of client IPs whose X-Forwarded-Proto header is
+    # trusted.  Use "*" to trust all (required for Azure App Service where the
+    # proxy IP is dynamic and the backend is not directly exposed to the
+    # internet).  Empty or missing -> forwarded headers are ignored.
+    FORWARDED_ALLOW_IPS: str = ""
+
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/careerpilot"
 
     # ── Backup & recovery (Phase 5E.11) ─────────────────────────────────────
@@ -220,6 +227,23 @@ class Settings(BaseSettings):
             return True
         env = (self.ENVIRONMENT or "development").strip().lower()
         return False
+
+    @property
+    def allowed_forwarded_ips(self) -> list[str]:
+        """Resolved list of proxy IPs whose forwarded headers are trusted.
+
+        Empty list disables forwarded-header processing (safe default).
+        ``["*"]`` trusts all IPs — only appropriate when the backend is
+        not directly exposed to the internet (e.g. Azure App Service).
+        """
+        raw = self.FORWARDED_ALLOW_IPS
+        if not raw:
+            return []
+        return [
+            ip.strip()
+            for ip in raw.split(",")
+            if ip.strip()
+        ]
 
     @property
     def rate_limit_config(self) -> dict:
