@@ -22,6 +22,7 @@ from app.core.config import get_settings
 from app.database.base import get_db
 from app.dependencies.auth import get_current_user
 from app.core.rate_limit_deps import expensive_rate_limiter
+from app.api.job_access import get_own_job
 from app.models.user import User
 from app.models.job import Job
 from app.models.resume import Resume
@@ -223,9 +224,8 @@ def generate_cover_letter(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # The job must belong to the current user (404 for foreign/missing jobs).
+    job = get_own_job(job_id, user, db)
 
     resume = _get_own_resume(body.resume_id, user, db)
     _validate_resume_usable(resume)

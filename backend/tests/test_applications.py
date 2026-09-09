@@ -33,11 +33,15 @@ class TestApplicationCRUDAndIsolation(unittest.TestCase):
             User(id=self.USER_A["id"], firebase_uid=self.USER_A["firebase_uid"], email="a@test.com", name="A"),
             User(id=self.USER_B["id"], firebase_uid=self.USER_B["firebase_uid"], email="b@test.com", name="B"),
         ])
-        # Jobs are a global catalog; both users can discover the same job.
+        # Jobs are saved per-user (see app.api.job_access); each user discovers
+        # and owns their own copy of a job.
         self.job = Job(id="job_1", user_id=self.USER_A["id"], title="Backend Developer",
                        company="Acme", description="Python FastAPI",
                        required_skills="Python, FastAPI")
-        db.add(self.job)
+        self.job_b = Job(id="job_b", user_id=self.USER_B["id"], title="Frontend Developer",
+                         company="Beta", description="React TypeScript",
+                         required_skills="React, TypeScript")
+        db.add_all([self.job, self.job_b])
         db.commit()
         db.close()
 
@@ -110,10 +114,10 @@ class TestApplicationCRUDAndIsolation(unittest.TestCase):
         self.assertEqual(body["notes"], "Panel round next week")
 
     def test_list_filters_different_users(self):
-        self.create_app()  # created as user A
+        self.create_app()  # created as user A against A's own job
         self.current_user_id = self.USER_B["id"]
-        # B creates their own application for the same (global) job
-        self.client.post("/applications", json={"job_id": "job_1", "status": "Applied"})
+        # B creates their own application for their own job copy
+        self.client.post("/applications", json={"job_id": "job_b", "status": "Applied"})
 
         # Each user listing must only show their own rows.
         all_apps = self.client.get("/applications").json()

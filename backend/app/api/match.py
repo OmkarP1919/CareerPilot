@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from app.database.base import get_db
 from app.dependencies.auth import get_current_user
 from app.core.rate_limit_deps import expensive_rate_limiter
+from app.api.job_access import get_own_job
 from app.models.user import User
-from app.models.job import Job
 from app.models.job_match import JobMatch
 from app.schemas.match import MatchResponse, SavedMatchResponse
 from app.services.matching import calculate_match
@@ -19,9 +19,8 @@ def match_job(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # The job must belong to the current user (404 for foreign/missing jobs).
+    job = get_own_job(job_id, user, db)
 
     result = calculate_match(user.id, job, db)
 
