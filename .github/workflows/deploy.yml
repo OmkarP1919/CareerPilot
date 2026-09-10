@@ -1,0 +1,94 @@
+# CareerPilot Production Deployment (Phase 5E.15)
+#
+# Builds the deployment artifact exactly as the running site uses it and
+# deploys it to Azure App Service using OpenID Connect (OIDC) workload
+# identity federation with a user-assigned managed identity. No secrets,
+# publish profiles, or long-lived credentials are stored or used.
+#
+# Security posture (see docs/ci_cd.md):
+#   - contents: read, id-token: write. No other permissions.
+#   - Third-party actions are pinned to commit SHAs (verified against tags):
+#       actions/checkout@v4 -> 11d5960a326750d5838078e36cf38b85af677262
+#       actions/setup-python@v5 -> a26af69be951a213d495a4c3e4e4022e16d87065
+#       azure/login@v2 -> 7184910d9eb2b1c5e48f7073824a90609bb9b6d6
+#   - Repository secrets used (OIDC identifiers only, never runtime secrets):
+#       AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID
+#   - The artifact contains app source, requirements.txt, and a fully
+#     populated vendor/ directory. It is deployed as a ZIP overlay
+#     (`--clean false`) so server-only payload files (e.g. the Firebase
+#     service account file) are preserved.
+#   - Database schema is NEVER initialized from this workflow.
+#   - The job fails if the post-deploy /healthz gate does not return 200.
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy backend to Azure App Service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Azure login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Build vendored deployment artifact
+        run: |
+          python -m pip install --no-cache-dir --target vendor -r requirements.txt
+          zip -r -q /tmp/careerpilot-deploy.zip app vendor requirements.txt -x "*/__pycache__/*" "*.pyc"
+
+      - name: Deploy to Azure App Service (ZIP overlay)
+        run: |
+          az webapp deploy \
+            --resource-group rg-careerpilot \
+            --name careerpilot-api-c9f0a1 \
+            --src-path /tmp/careerpilot-deploy.zip \
+            --type zip \
+            --clean false
+
+      - name: Health gate (wait for /healthz 200)
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://careerpilot-api-c9f0a1.azurewebsites.net/healthz || true)
+            echo "attempt $i: /healthz -> ${code}"
+            if [ "$code" = "200" ]; then
+              echo "healthz OK"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "healthz did not return 200" >&2
+          exit 1
+
+      - name: Readiness check (/health/readyz)
+        run: |
+          curl -sSf -o /dev/null https://careerpilot-api-c9f0a1.azurewebsites.net/health/readyz
