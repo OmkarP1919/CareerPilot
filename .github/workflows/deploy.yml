@@ -14,7 +14,11 @@
 #   - Repository secrets used (OIDC identifiers only, never runtime secrets):
 #       AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID
 #   - The artifact contains app source, requirements.txt, and a fully
-#     populated vendor/ directory. It is deployed as a ZIP overlay
+#     populated vendor/ directory. wheels are constrained to manylinux
+#     glibc 2.28 (platform manylinux_2_28_x86_64 / manylinux2014), which is
+#     compatible with the App Service Linux container's glibc (2.31); an
+#     unconstrained install produces wheels that require GLIBC_2.33 and fail
+#     at import. It is deployed as a ZIP overlay
 #     (`--clean false`) so server-only payload files (e.g. the Firebase
 #     service account file) are preserved.
 #   - Database schema is NEVER initialized from this workflow.
@@ -63,7 +67,15 @@ jobs:
 
       - name: Build vendored deployment artifact
         run: |
-          python -m pip install --no-cache-dir --target vendor -r requirements.txt
+          python -m pip install --no-cache-dir --target vendor \
+            --platform manylinux_2_28_x86_64 \
+            --platform manylinux2014_x86_64 \
+            --only-binary=:all: \
+            --python-version 3.12 \
+            --implementation cp \
+            --abi cp312 \
+            --abi abi3 \
+            -r requirements.txt
           zip -r -q /tmp/careerpilot-deploy.zip app vendor requirements.txt -x "*/__pycache__/*" "*.pyc"
 
       - name: Deploy to Azure App Service (ZIP overlay)
