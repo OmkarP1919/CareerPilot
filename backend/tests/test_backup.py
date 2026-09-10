@@ -180,6 +180,24 @@ class PathCompatibilityTests(unittest.TestCase):
                 with self.assertRaises(BackupError):
                     resolve_backup_path(base, bad)
 
+    def test_nested_traversal_attempts_rejected_both_separators(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            for bad in (
+                "a/../../escape.dump",
+                "a\\..\\..\\escape.dump",
+                "a/b/../../../escape.dump",
+            ):
+                with self.assertRaises(BackupError):
+                    resolve_backup_path(base, bad)
+
+    def test_mixed_separator_traversal_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            for bad in ("..\\../escape.dump", "a/..\\..\\..\\escape.dump"):
+                with self.assertRaises(BackupError):
+                    resolve_backup_path(base, bad)
+
     def test_absolute_path_outside_backup_dir_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

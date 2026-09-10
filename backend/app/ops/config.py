@@ -29,6 +29,14 @@ from pathlib import Path
 
 from sqlalchemy.engine import make_url
 
+# A path component made solely of dots ("..", "...", and longer runs).
+# ".." is the parent-directory reference, and the Windows path layer
+# canonicalizes "..."/"...." like "..", while POSIX keeps them as a literal
+# (but never legitimate) directory name. Rejecting the whole dot-run family
+# up front keeps traversal behavior consistent across platforms without
+# relying on platform-specific normalization or string-prefix checks.
+_DOT_ONLY_COMPONENT_RE = re.compile(r"(?:^|[/\\])[.][.]+(?=[/\\]|$)")
+
 from app.core.config import get_settings
 
 
@@ -170,6 +178,10 @@ def resolve_backup_path(backup_dir: Path, user_input: str | None) -> Path:
         raise BackupError("a backup file path is required")
     if "\x00" in raw:
         raise BackupError("backup path contains invalid characters (NUL)")
+    if _DOT_ONLY_COMPONENT_RE.search(raw):
+        raise BackupError(
+            f"backup path must not contain '..' traversal components: {raw!r}"
+        )
     if "\\" in raw and os.sep != "\\":
         # Backslash is a path separator on Windows but a literal filename
         # character on POSIX. Rejecting it here stops Windows-style traversal
