@@ -297,3 +297,97 @@ environment as the backend service. Add a contract check to `CHECKS` in
 `backend/scripts/release_smoke.py` whenever a new deploy-dependent contract is
 introduced; harness behavior is covered by
 `backend/tests/test_release_smoke.py`.
+
+## 12. Production deployment and rollback (5E.15)
+
+Phase 5E.15 wires production deployment into the repository: on a push to
+`main`, `.github/workflows/deploy.yml` builds the backend artifact and deploys
+it to Azure App Service using a federated OpenID Connect identity. No publish
+profile, username/password, or long-lived credential is stored anywhere.
+
+### Production inventory (stable)
+
+- API: `https://careerpilot-api-c9f0a1.azurewebsites.net` (App Service, Linux,
+  Basic B1, plan `asp-careerpilot`, region East Asia), health endpoints
+  `/healthz` (liveness) and `/health/readyz` (readiness incl. DB round-trip).
+- Web: `https://happy-meadow-00d50d800.5.azurestaticapps.net` (Azure Static
+  Web Apps, Free tier). CORS on the API admits this origin and only this
+  origin (`CORS_ORIGINS` is the exact SWA hostname).
+- DB: `careerpilot-pg-c9f0a1.postgres.database.azure.com:5432/careerpilot`,
+  Azure Database for PostgreSQL Flexible Server 16, `Standard_B1ms`,
+  Burstable, HA off. Direct access is IP-firewalled; only the API reaches it.
+- Identity: user-assigned managed identity `id-careerpilot-github` (free),
+  role "Website Contributor" on the API web app, federated credential
+  `github-main` for `token.actions.githubusercontent.com` (subject =
+  `repo:OmkarP1919@112790895/CareerPilot@1348872442:ref:refs/heads/main`).
+
+### The deployment artifact
+
+`deploy.yml` builds, installs into a vendored `vendor/`, and ships
+`app/ + vendor/ + requirements.txt` as a ZIP deployed with
+`az webapp deploy --type zip --clean false` (overlay, so server-only files such
+as `firebase-service-account.json` are preserved; DB schema is never touched).
+Wheels are installed with:
+
+```
+pip install --target vendor --platform manylinux_2_28_x86_64 \
+  --platform manylinux2014_x86_64 --only-binary=:all: \
+  --python-version 3.12 --implementation cp --abi cp312 --abi abi3 -r requirements.txt
+```
+
+This constraint exists because the App Service Linux Python container ships
+glibc **2.31**. An unconstrained install on a hosted runner can pick wheels
+(such as `cryptography`'s `_rust.abi3.so`) that demand glibc >= 2.33 and crash
+the app at import with `GLIBC_2.33' not found`. Both platform tags are needed:
+`pyMuPDF` and current `cryptography` publish `manylinux_2_28` (glibc 2.28,
+runs on 2.31) while `psycopg2-binary` publishes only `manylinux2014` (glibc
+2.17). `--abi cp312 --abi abi3` admits both cp312 and abi3 wheels. Verify any
+new/upgraded dependency the same way before landing it.
+
+The workflow then waits up to 10 minutes for `/healthz` -> 200 and performs a
+`/health/readyz` check; the job fails if the gate does not pass.
+
+### Rollback
+
+Preferred rollback is **git-first**: revert the deploy commit and push to
+`main`; the pipeline redeploys the previous code and re-runs its health gate.
+
+Manual/emergency rollback (keeps the site on B1; there is no F1 downgrade in
+this phase) with AZ CLI credentials:
+
+```
+# 1. Inspect the running layout and remove any stray Oryx build markers.
+#    Markers redirect the app path and cause "No module named 'app'".
+az webapp ssh -n careerpilot-api-c9f0a1 -g rg-careerpilot   # or Kudu command API
+#    In the shell:  rm -f /home/site/wwwroot/oryx-manifest.toml
+#                   rm -f /home/site/wwwroot/output.tar.zst
+#                   ls /home/site/wwwroot        # expect: .ostype app firebase-service-account.json requirements.txt vendor
+
+# 2. Ensure the app setting that prevents Oryx rebuilds is "false":
+az webapp config appsettings set -n careerpilot-api-c9f0a1 -g rg-careerpilot \
+  --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false
+
+# 3. Re-deploy a known-good, marker-free artifact (see the artifact rules above):
+zip -r careerpilot-deploy.zip app vendor requirements.txt -x "*/__pycache__/*" "*.pyc"
+az webapp deploy -g rg-careerpilot -n careerpilot-api-c9f0a1 \
+  --src-path careerpilot-deploy.zip --type zip --clean false
+
+# 4. Restart and verify (liveness, readiness incl. DB, symptoms free):
+az webapp restart -n careerpilot-api-c9f0a1 -g rg-careerpilot
+curl -fsS https://careerpilot-api-c9f0a1.azurewebsites.net/healthz
+curl -fsS https://careerpilot-api-c9f0a1.azurewebsites.net/health/readyz
+```
+
+Rollback rules:
+
+- Never redeploy a ZIP that contains `oryx-manifest.toml`/`output.tar.zst`
+  (they recreate the marker redirect at next startup).
+- Keep `SCM_DO_BUILD_DURING_DEPLOYMENT=false`; deleting it re-enables Oryx
+  builds that regenerate markers.
+- Keep `--clean false`; `--clean true` deletes `firebase-service-account.json`
+  and other server-only files.
+- A deployment can land while the platform reports a startup-timeout: the ARM
+  "starting the site" probe and the ZIP overlay are separate. Judge rollback by
+  the container startup log
+  (`az webapp log startup show -n careerpilot-api-c9f0a1 -g rg-careerpilot`)
+  and the two health endpoints, not by the deploy CLI status alone.
