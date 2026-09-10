@@ -7,6 +7,7 @@ PostgreSQL or its client binaries. PostgreSQL integration is covered by
 """
 
 import hashlib
+import os
 import subprocess
 import tempfile
 import unittest
@@ -149,6 +150,101 @@ class ConfigAndNamingTests(unittest.TestCase):
             with self.assertRaises(BackupError):
                 resolve_backup_path(base, link.name)
             outside.rmdir()
+
+
+class PathCompatibilityTests(unittest.TestCase):
+    """Windows/POSIX path acceptance and traversal rejection (Phase 5E.16.1).
+
+    Regression coverage for the Windows ``--verify-first`` defect found in
+    Phase 5E.16: legitimate Windows absolute/backslash paths must be accepted
+    while every traversal/escape vector keeps being rejected.
+    """
+
+    def test_empty_and_blank_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            for bad in ("", "   "):
+                with self.assertRaises(BackupError):
+                    resolve_backup_path(base, bad)
+
+    def test_malformed_nul_path_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with self.assertRaises(BackupError):
+                resolve_backup_path(base, "careerpilot\x00_prod_20260907-000000Z.dump")
+
+    def test_traversal_attempts_rejected_both_separators(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            for bad in ("../escape.dump", "..\\escape.dump", ".../escape.dump"):
+                with self.assertRaises(BackupError):
+                    resolve_backup_path(base, bad)
+
+    def test_absolute_path_outside_backup_dir_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            outside = Path(tempfile.gettempdir()) / "careerpilot_outside_20260907-000000Z.dump"
+            with self.assertRaises(BackupError):
+                resolve_backup_path(base, str(outside))
+
+    @unittest.skipUnless(os.name == "nt", "Windows path behavior")
+    def test_windows_absolute_path_in_backup_dir_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            name = "careerpilot_prod_20260907-000000Z.dump"
+            target = base / name
+            target.write_bytes(b"x")
+            resolved = resolve_backup_path(base, str(target))
+            self.assertEqual(resolved, target.resolve())
+
+    @unittest.skipUnless(os.name == "nt", "Windows path behavior")
+    def test_windows_backslash_relative_path_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            sub = base / "sub"
+            sub.mkdir()
+            name = "careerpilot_prod_20260907-000000Z.dump"
+            (sub / name).write_bytes(b"x")
+            resolved = resolve_backup_path(base, rf"sub\{name}")
+            self.assertEqual(resolved, (sub / name).resolve())
+
+    def test_path_with_spaces_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            spaced = base / "My Backups"
+            spaced.mkdir()
+            name = "careerpilot_prod_20260907-000000Z.dump"
+            (spaced / name).write_bytes(b"x")
+            rel_slash = f"My Backups/{name}"
+            self.assertEqual(
+                resolve_backup_path(base, rel_slash), (spaced / name).resolve()
+            )
+            if os.name == "nt":
+                rel_backslash = rf"My Backups\{name}"
+                self.assertEqual(
+                    resolve_backup_path(base, rel_backslash), (spaced / name).resolve()
+                )
+
+    def test_forward_slash_relative_path_resolves_under_backup_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            nested = base / "a" / "b"
+            nested.mkdir(parents=True)
+            name = "careerpilot_prod_20260907-000000Z.dump"
+            (nested / name).write_bytes(b"x")
+            self.assertEqual(
+                resolve_backup_path(base, f"a/b/{name}"), (nested / name).resolve()
+            )
+
+    @unittest.skipUnless(os.name != "nt", "POSIX path behavior")
+    def test_posix_absolute_path_in_backup_dir_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            name = "careerpilot_prod_20260907-000000Z.dump"
+            target = base / name
+            target.write_bytes(b"x")
+            resolved = resolve_backup_path(base, str(target))
+            self.assertEqual(resolved, target.resolve())
 
 
 class CommandConstructionTests(unittest.TestCase):
@@ -364,6 +460,9 @@ class RestoreSafetyTests(unittest.TestCase):
                 return _completed(command=command)
 
             with mock.patch.object(bk, "_require_program", return_value=None), \
+                 mock.patch.object(
+                     bk, "server_supports_transaction_timeout", return_value=True
+                 ), \
                  mock.patch.object(bk, "run_command", side_effect=fake_run):
                 result = bk.restore_backup(
                     config, "careerpilot_prod_20260907-000000Z.dump", confirm=True
@@ -384,6 +483,9 @@ class RestoreSafetyTests(unittest.TestCase):
                 return _completed(returncode=1, stderr="password authentication failed", command=command)
 
             with mock.patch.object(bk, "_require_program", return_value=None), \
+                 mock.patch.object(
+                     bk, "server_supports_transaction_timeout", return_value=True
+                 ), \
                  mock.patch.object(bk, "run_command", side_effect=failing_run), \
                  self.assertRaises(BackupError) as ctx:
                 bk.restore_backup(
@@ -522,6 +624,182 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             bk.main(["--backup-dir", ".", "frobnicate"])
         self.assertEqual(ctx.exception.code, 2)
+
+
+class RestoreVerifyFirstWindowsRegressionTests(unittest.TestCase):
+    """Regression for the 5E.16 Windows ``--verify-first`` restore defect.
+
+    ``restore_backup`` re-passes the resolved absolute path into ``verify_backup``;
+    on Windows that path uses backslashes, which previously made
+    ``resolve_backup_path`` reject it with ``BackupError``. The fixed path
+    handling must accept it and proceed to restore.
+    """
+
+    @unittest.skipUnless(os.name == "nt", "Windows-specific path defect")
+    def test_restore_verify_first_accepts_resolved_windows_absolute_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            _write_dump(directory, "careerpilot_prod_20260907-000000Z.dump")
+            config = _make_config(directory)
+            calls = []
+
+            def fake_run(command, timeout=0):
+                calls.append(command)
+                if command[0] == "pg_restore":
+                    return _completed(stdout="; catalog\n", command=command)
+                return _completed(command=command)
+
+            with mock.patch.object(bk, "_require_program", return_value=None), \
+                 mock.patch.object(
+                     bk, "server_supports_transaction_timeout", return_value=True
+                 ), \
+                 mock.patch.object(bk, "run_command", side_effect=fake_run):
+                result = bk.restore_backup(
+                    config,
+                    str(directory / "careerpilot_prod_20260907-000000Z.dump"),
+                    confirm=True,
+                    verify_first=True,
+                    target_database_url=TEST_DB,
+                )
+            self.assertTrue(result["restored"])
+            self.assertEqual(result["target_database"], "cp_test")
+            self.assertTrue(calls)
+
+
+class Pg16CompatTests(unittest.TestCase):
+    """PostgreSQL 16/17 client compatibility handling (Phase 5E.16.1)."""
+
+    def test_filter_removes_only_exact_transaction_timeout_statement(self):
+        sql = (
+            b"SET statement_timeout = 0;\n"
+            b"SET transaction_timeout = 0;\n"
+            b"SET client_encoding = 'UTF8';\n"
+            b"INSERT INTO t VALUES ('SET transaction_timeout = 0;');\n"
+            b"UPDATE x SET y = 'SET transaction_timeout = 0;' WHERE id = 1;\n"
+            b"  SET   transaction_timeout    =    0  ;  \n"
+        )
+        filtered, removed = bk.filter_pg16_transaction_timeout(sql)
+        self.assertEqual(removed, 2)
+        self.assertEqual(
+            filtered,
+            b"SET statement_timeout = 0;\n"
+            b"SET client_encoding = 'UTF8';\n"
+            b"INSERT INTO t VALUES ('SET transaction_timeout = 0;');\n"
+            b"UPDATE x SET y = 'SET transaction_timeout = 0;' WHERE id = 1;\n",
+        )
+
+    def test_filter_is_noop_without_transaction_timeout(self):
+        sql = b"SET statement_timeout = 0;\nCREATE TABLE t(id int);\n"
+        filtered, removed = bk.filter_pg16_transaction_timeout(sql)
+        self.assertEqual(removed, 0)
+        self.assertEqual(filtered, sql)
+
+    def test_pg_restore_sql_command_construction(self):
+        cmd = bk.pg_restore_sql_command(Path("/bk/x.dump"), Path("/bk/x.sql"))
+        self.assertEqual(cmd[0], "pg_restore")
+        for flag in ("--clean", "--if-exists", "--no-owner", "--file"):
+            self.assertIn(flag, cmd)
+        self.assertIn(str(Path("/bk/x.sql")), cmd)
+        self.assertIn(str(Path("/bk/x.dump")), cmd)
+
+    def test_psql_run_script_command_construction(self):
+        cmd = bk.psql_run_script_command(TEST_DB, Path("/bk/x.sql"))
+        self.assertEqual(cmd[0], "psql")
+        self.assertIn("ON_ERROR_STOP=1", cmd)
+        self.assertIn(TEST_DB, cmd)
+        self.assertIn(str(Path("/bk/x.sql")), cmd)
+
+    def test_server_supports_transaction_timeout_false_on_pg16(self):
+        with mock.patch.object(bk, "_require_program", return_value=None), \
+             mock.patch.object(
+                 bk, "run_command", return_value=_completed(stdout="160015\n")
+             ):
+            self.assertFalse(bk.server_supports_transaction_timeout(TEST_DB))
+
+    def test_server_supports_transaction_timeout_true_on_pg17(self):
+        with mock.patch.object(bk, "_require_program", return_value=None), \
+             mock.patch.object(
+                 bk, "run_command", return_value=_completed(stdout="170015\n")
+             ):
+            self.assertTrue(bk.server_supports_transaction_timeout(TEST_DB))
+
+    def test_server_probe_failure_raises(self):
+        with mock.patch.object(bk, "_require_program", return_value=None), \
+             mock.patch.object(
+                 bk, "run_command",
+                 return_value=_completed(returncode=1, stderr="no route to host"),
+             ), \
+             self.assertRaises(BackupError):
+            bk.server_supports_transaction_timeout(TEST_DB)
+
+    def test_restore_archive_pg16_compat_happy_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "careerpilot_prod_20260907-000000Z.dump"
+            archive.write_bytes(b"ARCHIVE")
+            psql_scripts = []
+            bodies = []
+
+            def fake_run(command, timeout=0):
+                if command[0] == "pg_restore":
+                    out = Path(command[command.index("--file") + 1])
+                    out.write_bytes(
+                        b"SET statement_timeout = 0;\n"
+                        b"SET transaction_timeout = 0;\n"
+                        b"CREATE TABLE t(id int);\n"
+                    )
+                elif command[0] == "psql":
+                    psql_scripts.append(command[command.index("--file") + 1])
+                    bodies.append(Path(command[command.index("--file") + 1]).read_bytes())
+                return _completed(stdout="", command=command)
+
+            with mock.patch.object(bk, "_require_program", return_value=None), \
+                 mock.patch.object(bk, "run_command", side_effect=fake_run):
+                bk.restore_archive_pg16_compat(TEST_DB, archive)
+            self.assertEqual(len(psql_scripts), 1)
+            self.assertIn(".filtered.sql", psql_scripts[0])
+            self.assertNotIn(b"transaction_timeout", bodies[0])
+            self.assertIn(b"CREATE TABLE t(id int);", bodies[0])
+            self.assertIn(b"SET statement_timeout = 0;", bodies[0])
+
+    def test_restore_archive_pg16_compat_failure_propagates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "careerpilot_prod_20260907-000000Z.dump"
+            archive.write_bytes(b"ARCHIVE")
+
+            def fake_run(command, timeout=0):
+                if command[0] == "pg_restore":
+                    out = Path(command[command.index("--file") + 1])
+                    out.write_bytes(
+                        b"SET transaction_timeout = 0;\nCREATE TABLE t(id int);\n"
+                    )
+                    return _completed(command=command)
+                return _completed(
+                    returncode=1, stderr="relation already exists", command=command
+                )
+
+            with mock.patch.object(bk, "_require_program", return_value=None), \
+                 mock.patch.object(bk, "run_command", side_effect=fake_run), \
+                 self.assertRaises(BackupError) as ctx:
+                bk.restore_archive_pg16_compat(TEST_DB, archive)
+            self.assertIn("restore failed", str(ctx.exception))
+
+    def test_restore_backup_uses_compat_path_on_pg16_server(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_dump(Path(tmp), "careerpilot_prod_20260907-000000Z.dump")
+            config = _make_config(Path(tmp))
+            with mock.patch.object(bk, "_require_program", return_value=None), \
+                 mock.patch.object(
+                     bk, "server_supports_transaction_timeout", return_value=False
+                 ), \
+                 mock.patch.object(bk, "restore_archive_pg16_compat") as compat:
+                result = bk.restore_backup(
+                    config,
+                    "careerpilot_prod_20260907-000000Z.dump",
+                    confirm=True,
+                    target_database_url=TEST_DB,
+                )
+            self.assertTrue(result["restored"])
+            compat.assert_called_once()
 
 
 if __name__ == "__main__":

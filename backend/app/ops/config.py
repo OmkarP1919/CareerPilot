@@ -21,6 +21,7 @@ Design:
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -156,17 +157,26 @@ def resolve_backup_path(backup_dir: Path, user_input: str | None) -> Path:
     A relative input is resolved under the backup directory; an absolute input
     must resolve inside it (``Path.resolve`` neutralizes ``..`` and symlinks).
     Raises ``BackupError`` for empty input or anything that escapes.
+
+    On Windows, backslash is the native separator, so valid Windows paths
+    (e.g. ``C:\\backups\\careerpilot_x.dump``) are normalized to forward
+    slashes before resolution. On POSIX a backslash is a literal filename
+    character and is rejected outright, so Windows-style traversal
+    (``..\\escape.dump``) can never bypass the resolve-then-contain check
+    below.
     """
     raw = (user_input or "").strip()
     if not raw:
         raise BackupError("a backup file path is required")
-    if "\\" in raw:
+    if "\x00" in raw:
+        raise BackupError("backup path contains invalid characters (NUL)")
+    if "\\" in raw and os.sep != "\\":
         # Backslash is a path separator on Windows but a literal filename
         # character on POSIX. Rejecting it here stops Windows-style traversal
         # ("..\\escape.dump") from bypassing containment on Linux without
         # weakening the resolve-then-contain check below.
         raise BackupError(f"backup path must not contain backslashes: {raw!r}")
-    candidate = Path(raw)
+    candidate = Path(raw.replace("\\", "/")) if os.sep == "\\" else Path(raw)
     if candidate.is_absolute():
         resolved = candidate.resolve()
     else:

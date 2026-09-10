@@ -31,9 +31,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -164,6 +166,59 @@ def pg_restore_restore_command(database_url: str, dump_path: Path) -> list[str]:
         "--dbname", database_url,
         str(dump_path),
     ]
+
+
+def pg_restore_sql_command(dump_path: Path, output_path: Path) -> list[str]:
+    """Build the argv that extracts an archive into a plain SQL script.
+
+    Mirrors the destructive restore flags used by the direct restore path
+    (``--clean --if-exists``) and ``--no-owner``; no database is touched. Used
+    only by the PostgreSQL 16 compatibility path, which filters the extracted
+    SQL before executing it with ``psql``.
+    """
+    return [
+        "pg_restore",
+        "--clean",
+        "--if-exists",
+        "--no-owner",
+        "--file", str(output_path),
+        str(dump_path),
+    ]
+
+
+def psql_run_script_command(database_url: str, script_path: Path) -> list[str]:
+    """Build the argv that executes a SQL script with errors treated as fatal.
+
+    ``ON_ERROR_STOP`` makes ``psql`` abort (non-zero exit) on ANY unexpected
+    error, so the compatibility path can never hide arbitrary restore errors.
+    """
+    return [
+        "psql",
+        "--set", "ON_ERROR_STOP=1",
+        "--dbname", database_url,
+        "--file", str(script_path),
+    ]
+
+
+# PostgreSQL 17 clients embed this session-setting in the dump header; servers
+# before PostgreSQL 17 reject it as an unrecognized configuration parameter.
+# Only the exact whole-line statement is ever removed by the compatibility path.
+_TRANSACTION_TIMEOUT_SET_RE = re.compile(
+    rb"^[ \t]*SET[ \t]+transaction_timeout[ \t]*=[ \t]*0[ \t]*;?[ \t]*\r?$",
+    re.IGNORECASE,
+)
+
+
+def filter_pg16_transaction_timeout(sql: bytes) -> tuple[bytes, int]:
+    """Remove the exact ``SET transaction_timeout = 0;`` statement from ``sql``.
+
+    The statement is matched as a single anchored whole line (case-insensitive,
+    allowing surrounding whitespace), so unrelated SQL is never modified.
+    Returns ``(filtered_sql, removed_count)``.
+    """
+    lines = sql.splitlines(keepends=True)
+    kept = [line for line in lines if _TRANSACTION_TIMEOUT_SET_RE.match(line) is None]
+    return b"".join(kept), len(lines) - len(kept)
 
 
 # Checksums --------------------------------------------------------------------
@@ -361,6 +416,89 @@ def _psql(argv_tail: list[str]) -> subprocess.CompletedProcess:
     return run_command(["psql"] + argv_tail)
 
 
+def _maintenance_database_url(database_url: str) -> str:
+    """Return the ``postgres`` maintenance URL for ``database_url``'s server."""
+    parsed = make_url(database_url)
+    if not parsed.database:
+        raise BackupError("target database URL has no database name")
+    return parsed.set(database="postgres").render_as_string(hide_password=False)
+
+
+def _server_version_num(database_url: str) -> int:
+    """Read-only probe of the target server's version (e.g. ``160015``).
+
+    Connects to the server's ``postgres`` maintenance database so the probe
+    works even before a not-yet-created target database exists.
+    """
+    probe = _psql(
+        [
+            "--tuples-only",
+            "--no-align",
+            "--quiet",
+            "--dbname", _maintenance_database_url(database_url),
+            "--command", "SHOW server_version_num",
+        ]
+    )
+    if probe.returncode != 0:
+        raise BackupError(
+            f"could not determine server version: {_stderr_tail(probe.stderr)}"
+        )
+    try:
+        return int((probe.stdout or "").strip())
+    except ValueError:
+        raise BackupError("could not parse server version from psql output") from None
+
+
+def server_supports_transaction_timeout(database_url: str) -> bool:
+    """True when the target server is PostgreSQL 17+ (owns ``transaction_timeout``).
+
+    Keeps the strict direct ``pg_restore --exit-on-error`` path for servers
+    that accept the parameter and reserves the narrowly-scoped SQL-filter path
+    for older servers (PG16 and below) where PG17-created archives would
+    otherwise abort before restoring anything.
+    """
+    return _server_version_num(database_url) >= 170000
+
+
+def restore_archive_pg16_compat(database_url: str, dump_path: Path) -> None:
+    """Restore an archive on PostgreSQL < 17 servers via filtered SQL.
+
+    PG17-created custom archives embed ``SET transaction_timeout = 0;`` in the
+    dump header, which PostgreSQL 16 (and earlier) servers reject. Running
+    ``pg_restore`` directly with ``--exit-on-error`` therefore aborts on the
+    very first statement without restoring anything.
+
+    This path extracts the archive to SQL with the same destructive semantics
+    as the direct restore (``--clean --if-exists --no-owner``), strips ONLY the
+    single known-inert statement, and executes the result with psql
+    ``ON_ERROR_STOP`` so every OTHER error still aborts the restore with a
+    non-zero exit. Real restore failures are never converted into success.
+    """
+    _require_program("pg_restore")
+    _require_program("psql")
+    with tempfile.TemporaryDirectory(prefix="cp_restore_") as tmp:
+        extracted = Path(tmp) / "restore.sql"
+        extract_result = run_command(pg_restore_sql_command(dump_path, extracted))
+        if extract_result.returncode != 0:
+            raise BackupError(
+                "pg_restore SQL extraction failed "
+                f"(exit {extract_result.returncode}): "
+                f"{_stderr_tail(extract_result.stderr)}"
+            )
+        raw = extracted.read_bytes()
+        filtered, removed = filter_pg16_transaction_timeout(raw)
+        script = extracted
+        if removed:
+            script = Path(tmp) / "restore.filtered.sql"
+            script.write_bytes(filtered)
+        result = run_command(psql_run_script_command(database_url, script))
+        if result.returncode != 0:
+            raise BackupError(
+                f"restore failed (exit {result.returncode}): "
+                f"{_stderr_tail(result.stderr)}"
+            )
+
+
 def create_target_database(database_url: str) -> bool:
     """Create the target database from ``database_url`` if it does not exist.
 
@@ -372,14 +510,13 @@ def create_target_database(database_url: str) -> bool:
     target_db = parsed.database
     if not target_db:
         raise BackupError("target database URL has no database name")
-    maintenance = parsed.set(database="postgres")
-    maintenance_url = maintenance.render_as_string(hide_password=True)
+    maintenance_url = _maintenance_database_url(database_url)
     check = _psql(
         [
             "--tuples-only",
             "--no-align",
             "--quiet",
-            "--dbname", maintenance.render_as_string(hide_password=False),
+            "--dbname", maintenance_url,
             "--command",
             f"SELECT 1 FROM pg_database WHERE datname = '{target_db.replace(chr(39), chr(39) * 2)}'",
         ]
@@ -389,7 +526,7 @@ def create_target_database(database_url: str) -> bool:
     identifier = target_db.replace('"', '""')
     created = _psql(
         [
-            "--dbname", maintenance.render_as_string(hide_password=False),
+            "--dbname", maintenance_url,
             "--command",
             f'CREATE DATABASE "{identifier}"',
         ]
@@ -457,12 +594,15 @@ def restore_backup(
         create_target_database(target)
 
     _require_program("pg_restore")
-    restore_result = run_command(pg_restore_restore_command(target, path))
-    if restore_result.returncode != 0:
-        raise BackupError(
-            f"pg_restore failed (exit {restore_result.returncode}): "
-            f"{_stderr_tail(restore_result.stderr)}"
-        )
+    if server_supports_transaction_timeout(target):
+        restore_result = run_command(pg_restore_restore_command(target, path))
+        if restore_result.returncode != 0:
+            raise BackupError(
+                f"pg_restore failed (exit {restore_result.returncode}): "
+                f"{_stderr_tail(restore_result.stderr)}"
+            )
+    else:
+        restore_archive_pg16_compat(target, path)
     return {
         "restored": True,
         "dump": path.name,

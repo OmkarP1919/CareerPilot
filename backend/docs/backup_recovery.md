@@ -178,6 +178,11 @@ database on the same server (or a local server):
   or truncates anything).
 - `--verify-first` runs the non-destructive inspection before restoring.
 - `--confirm-restore` is **required**; without it the command exits `2`.
+- On a **Windows** host, `--dump` also accepts Windows absolute paths (e.g.
+  `C:\backups\careerpilot_x.dump`) — backslashes are treated as the native
+  path separator (Phase 5E.16.1); on Linux/macOS backslashes in paths are
+  rejected outright so Windows-style `..\` traversal cannot bypass
+  containment. `..\foo` / `../foo` escapes are refused on every platform.
 
 Then point a scratch instance of the app (or `psql`) at `cp_practice` and run
 the smoke checks in §11. Drop the practice database when done:
@@ -209,6 +214,28 @@ override) and runs:
 - `--no-owner` avoids ownership failures when the connecting role differs.
 - The CLI prints the target database name and a replacement warning before
   doing anything, and refuses (exit `2`) if `--confirm-restore` is absent.
+
+### PostgreSQL 16 vs 17 clients and servers
+
+The restore tool adapts to the **target server's** major version (probed with
+`SHOW server_version_num`):
+
+- **Target server ≥ 17:** direct `pg_restore --exit-on-error --clean
+  --if-exists --no-owner --dbname <target> <archive>` (unchanged).
+- **Target server 16 or earlier:** PostgreSQL 17+ `pg_dump`/`pg_restore`
+  client tools embed `SET transaction_timeout = 0;` in the archive header.
+  PostgreSQL 16 servers reject that parameter, so a direct restore aborts on
+  the very first statement. The tool then uses the **PG16 compatibility
+  path**: `pg_restore` extracts the archive to SQL with the same destructive
+  semantics as the direct path, the single whole-line `SET transaction_timeout
+  = 0;` statement is stripped (nothing else is ever modified), and the result
+  is executed with `psql --set ON_ERROR_STOP=1` so **every other error still
+  aborts** the restore with a non-zero exit code. This is the path exercised
+  against the Azure `careerpilot-pg-c9f0a1` server (PostgreSQL 16) in
+  Phase 5E.16 / 5E.16.1.
+
+The client tools themselves may be PostgreSQL 17 (any host) — the target
+server's version alone selects the path.
 
 Suggested sequence:
 
@@ -365,20 +392,81 @@ Covered:
 
 - logical PostgreSQL backup/verify/restore/retention via standard tools;
 - checksum sidecars and a documented human-restore workflow;
-- `STORAGE_ROOT` filesystem recovery guidance (§9).
+- `STORAGE_ROOT` filesystem recovery guidance (§9);
+- PostgreSQL 16 / 17 restore compatibility (`transaction_timeout` filter) and
+  Windows path handling (Phase 5E.16.1);
+- off-host backup analysis and Azure-managed PITR posture (§15).
 
-Not covered (by design or out of scope for 5E.11):
+Not covered (by design or out of scope for 5E.11 / 5E.16.1):
 
 - no proprietary backup format, no in-app backup engine, no database backup
   API endpoint — restore is an operator task via the CLI, never a web endpoint;
-- no cloud object-storage lifecycle management, no provider-managed PITR —
-  configure those at the infrastructure layer;
+- no cloud object-storage lifecycle management — provider-managed PITR exists
+  at the infrastructure layer (Flexible Server automated backups) but no
+  Storage Account / off-host object store has been provisioned yet (§15);
 - no encryption of backups at rest by the tool itself (the volume / bucket
   should be encrypted at the infrastructure layer and credentials must stay
   out of the repository);
 - no orchestrated multi-host scheduling — run `create` from cron if desired;
   lock/cron overlap is safe because a same-name archive is refused, though two
   simultaneous creates in the same second cannot both succeed.
+
+## 15. Off-host backup design (Phase 5E.16.1)
+
+The logical CLI backups in this runbook and any files under `STORAGE_ROOT`
+live on the **Azure App Service's** persistent `/home` disk
+(`BACKUP_DIR=/home/data/backups`, `STORAGE_ROOT=/home/data/uploads`). That
+disk survives app restarts and deployments, but it is **not** off-host: it
+resides on the same App Service infrastructure and is lost if the App Service
+or its underlying storage is destroyed, and it does not survive a regional
+outage. The primary off-host safety net for this deployment is therefore the
+**managed database provider**, which is already active at zero additional
+cost:
+
+| Layer | Mechanism | Off-host? | Cost |
+| --- | --- | --- | --- |
+| Database rows | Azure PostgreSQL Flexible Server **automated backups + point-in-time restore (PITR)** | Yes — Azure-managed storage (region-paired) | Included in the server price; first 2× provisioned storage (2×32 GB) of backup storage is free |
+| Database rows | Logical `pg_dump` archives (this tool) | No — App Service `/home` | Free (existing B1/B1ms infrastructure) |
+| Uploaded files | App Service `/home` filesystem | No — App Service `/home` | Free (existing infrastructure) |
+
+Current production posture (verified read-only in Phase 5E.16.1):
+
+- `careerpilot-pg-c9f0a1` (Flexible Server, PG 16.15, Standard_B1ms, East
+  Asia): automated backups enabled with **7-day retention**, PITR to any point
+  in that window (`earliestRestoreDate` is live), geo-redundant backup
+  disabled, high availability disabled, storage auto-grow disabled (32 GB
+  fixed).
+- Logical dumps are created manually via this tool on the App Service and/or
+  an operator host; `BACKUP_DIR` and `STORAGE_ROOT` are on `/home` and must be
+  protected by the managed database backup plus an external copy.
+
+Recommendations (no new paid resources during 5E.16.1):
+
+1. **Tighten nothing; extend retention in-place.** Increase Flexible Server
+   `backupRetentionDays` from 7 to 14–35. Backup storage up to 2× the
+   provisioned size (64 GB here) is free, and the current database is ~9 MB,
+   so this adds no cost while widening the PITR window. Set
+   `geoRedundantBackup=Disabled` stays (paid premium feature, unnecessary for
+   the beta).
+2. **Adopt the managed PITR restore as the primary recovery path** for the
+   database; keep the logical dump tool as the last-known-good point-in-time
+   artifact and as the offline restore mechanism. Restoring a Flexible Server
+   PITR backup creates a *new* server/database — point the app's
+   `DATABASE_URL` at it afterwards.
+3. **Get logical archives + uploads truly off-host later.** A Storage Account
+   (blobs) in a different region reached via `rclone`/`azcopy` would move
+   `careerpilot_*.dump` archives and `STORAGE_ROOT` copies out of `/home`.
+   Estimated cost for ~GB-scale data is a fraction of a cent per month, but it
+   **requires provisioning a new resource**, which is out of scope for
+   Phase 5E.16.1 (no resources were created). Do it in a follow-up phase with
+   approval.
+4. **Scheduling.** The runbook commands are operator-driven; consider a
+   scheduled `create` (App Service cron or CI workflow) once an off-host copy
+   target exists.
+
+No cloud resources were created, changed, or deleted by this phase besides the
+temporary scratch database and firewall rules used for the live restore drill,
+which were removed afterwards.
 
 ## Files
 
