@@ -296,36 +296,38 @@ export default function JobDetailsPage() {
       </header>
 
       {/* Tabs Navigation */}
-      <div className="job-details-tabs" role="tablist">
-        <button
-          type="button"
-          className={`details-tab ${activeTab === "overview" ? "active" : ""}`}
-          onClick={() => setActiveTab("overview")}
-          role="tab"
-          aria-selected={activeTab === "overview"}
-        >
-          <span>{t("jobDetail.overview", "Overview & Requirements")}</span>
-        </button>
+      <div className="tabs-scroll-container">
+        <div className="job-details-tabs" role="tablist">
+          <button
+            type="button"
+            className={`details-tab ${activeTab === "overview" ? "active" : ""}`}
+            onClick={() => setActiveTab("overview")}
+            role="tab"
+            aria-selected={activeTab === "overview"}
+          >
+            <span>{t("jobDetail.overview", "Overview & Requirements")}</span>
+          </button>
 
-        <button
-          type="button"
-          className={`details-tab ${activeTab === "fit" ? "active" : ""}`}
-          onClick={() => setActiveTab("fit")}
-          role="tab"
-          aria-selected={activeTab === "fit"}
-        >
-          <span>{t("jobDetail.yourFit", "Your Fit")} ({overallScore}%)</span>
-        </button>
+          <button
+            type="button"
+            className={`details-tab ${activeTab === "fit" ? "active" : ""}`}
+            onClick={() => setActiveTab("fit")}
+            role="tab"
+            aria-selected={activeTab === "fit"}
+          >
+            <span>{t("jobDetail.yourFit", "Your Fit")} ({overallScore}%)</span>
+          </button>
 
-        <button
-          type="button"
-          className={`details-tab ${activeTab === "resume" ? "active" : ""}`}
-          onClick={openAnalyze}
-          role="tab"
-          aria-selected={activeTab === "resume"}
-        >
-          <span>{t("jobDetail.resumeMatch", "Resume Match")}</span>
-        </button>
+          <button
+            type="button"
+            className={`details-tab ${activeTab === "resume" ? "active" : ""}`}
+            onClick={openAnalyze}
+            role="tab"
+            aria-selected={activeTab === "resume"}
+          >
+            <span>{t("jobDetail.resumeMatch", "Resume Match")}</span>
+          </button>
+        </div>
       </div>
 
       {/* Tab 1: Overview */}

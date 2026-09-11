@@ -657,11 +657,12 @@ html[data-theme="dark"] .auth-interactive-banner {
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--mobile-nav-height);
+  height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
   background: var(--bg-nav-mobile);
   border-top: 1px solid var(--border);
   z-index: 50;
   backdrop-filter: blur(8px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .bottom-nav-inner {
@@ -865,7 +866,7 @@ html[data-theme="dark"] .auth-interactive-banner {
 
   .main-content {
     padding-top: calc(var(--nav-height) + var(--space-4));
-    padding-bottom: calc(var(--mobile-nav-height) + var(--space-8));
+    padding-bottom: calc(var(--mobile-nav-height) + var(--space-8) + env(safe-area-inset-bottom, 0px));
     padding-left: var(--space-4);
     padding-right: var(--space-4);
   }
@@ -880,9 +881,38 @@ html[data-theme="dark"] .auth-interactive-banner {
   }
 }
 
+@media (max-width: 640px) {
+  .page-header h1 {
+    font-size: var(--text-2xl);
+  }
+
+  .page-header p {
+    font-size: var(--text-sm);
+  }
+
+  .page-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  .page-header-actions {
+    width: 100%;
+  }
+
+  .page-header-actions > .btn {
+    flex: 1;
+  }
+}
+
 @media (max-width: 880px) {
   .auth-split-layout {
-    padding: var(--space-4);
+    padding: var(--space-4) var(--space-3);
+    min-height: 100vh;
+    min-height: 100dvh;
+    align-items: flex-start;
+    justify-content: center;
+    overflow-y: auto;
   }
 
   .auth-split-container {
@@ -890,6 +920,7 @@ html[data-theme="dark"] .auth-interactive-banner {
     max-width: 480px;
     min-height: auto;
     border-radius: var(--radius-xl);
+    margin: var(--space-4) auto;
   }
 
   .auth-interactive-banner,
@@ -899,10 +930,13 @@ html[data-theme="dark"] .auth-interactive-banner {
 
   .auth-mobile-header {
     display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--space-4);
   }
 
   .auth-form-pane {
-    padding: var(--space-8) var(--space-6);
+    padding: var(--space-6) var(--space-5);
   }
 }
 
@@ -911,13 +945,26 @@ html[data-theme="dark"] .auth-interactive-banner {
     max-width: 100%;
   }
 
+  .auth-split-layout {
+    padding: var(--space-3) var(--space-2);
+  }
+
+  .auth-split-container {
+    max-width: 100%;
+    margin: var(--space-2) auto;
+  }
+
   .auth-card {
     padding: var(--space-5);
     border-radius: var(--radius-lg);
   }
 
+  .auth-mobile-header {
+    margin-bottom: var(--space-3);
+  }
+
   .auth-form-pane {
-    padding: var(--space-6) var(--space-4);
+    padding: var(--space-5) var(--space-3);
   }
 }
 

@@ -1041,19 +1041,21 @@ export default function ApplicationsPage() {
 
       {/* Filter Tabs */}
       <div className="apps-filter-bar">
-        <div className="tabs-pill" role="tablist">
-          {["all", "saved", "applied", "interview", "offer", "rejected"].map((st) => (
-            <button
-              key={st}
-              type="button"
-              className={`tab-pill-item ${statusFilter === st ? "active" : ""}`}
-              onClick={() => setStatusFilter(st)}
-              role="tab"
-              aria-selected={statusFilter === st}
-            >
-              <span style={{ textTransform: "capitalize" }}>{st === "all" ? "All Applications" : st}</span>
-            </button>
-          ))}
+        <div className="tabs-scroll-container">
+          <div className="tabs-pill" role="tablist">
+            {["all", "saved", "applied", "interview", "offer", "rejected"].map((st) => (
+              <button
+                key={st}
+                type="button"
+                className={`tab-pill-item ${statusFilter === st ? "active" : ""}`}
+                onClick={() => setStatusFilter(st)}
+                role="tab"
+                aria-selected={statusFilter === st}
+              >
+                <span style={{ textTransform: "capitalize" }}>{st === "all" ? "All Applications" : st}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -1161,24 +1163,26 @@ export default function ApplicationsPage() {
           title={`Application: ${activeJob.title}`}
         >
           <div className="app-detail-modal-body">
-            <div className="tabs-pill detail-tabs" role="tablist">
-              {[
-                { id: "overview", label: t("app.tabOverview", "Overview") },
-                { id: "timeline", label: t("app.tabTimeline", "Timeline") },
-                { id: "interviews", label: t("app.tabInterviews", "Interviews") },
-                { id: "documents", label: t("app.tabDocuments", "Documents") },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={detailTab === tab.id}
-                  className={`tab-pill-item ${detailTab === tab.id ? "active" : ""}`}
-                  onClick={() => setDetailTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
+            <div className="tabs-scroll-container">
+              <div className="tabs-pill detail-tabs" role="tablist">
+                {[
+                  { id: "overview", label: t("app.tabOverview", "Overview") },
+                  { id: "timeline", label: t("app.tabTimeline", "Timeline") },
+                  { id: "interviews", label: t("app.tabInterviews", "Interviews") },
+                  { id: "documents", label: t("app.tabDocuments", "Documents") },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === tab.id}
+                    className={`tab-pill-item ${detailTab === tab.id ? "active" : ""}`}
+                    onClick={() => setDetailTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {detailTab === "overview" && (

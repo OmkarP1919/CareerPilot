@@ -433,35 +433,38 @@ export default function JobsPage() {
       <section className="jobs-workspace-controls">
         <div className="jobs-controls-top">
           {/* Tabs */}
-          <div className="tabs-pill" role="tablist">            <button
-              type="button"
-              className={`tab-pill-item ${activeTab === "recommended" ? "active" : ""}`}
-              onClick={() => setActiveTab("recommended")}
-              role="tab"
-              aria-selected={activeTab === "recommended"}
-            >
-              <span>{t("jobs.recommendedTab", "Recommended for You")}</span>
-              <span className="tab-pill-count">{recommendedJobs.length}</span>
-            </button>
-            <button
-              type="button"
-              className={`tab-pill-item ${activeTab === "all" ? "active" : ""}`}
-              onClick={() => setActiveTab("all")}
-              role="tab"
-              aria-selected={activeTab === "all"}
-            >
-              <span>{t("jobs.allTab", "All Opportunities")}</span>
-              <span className="tab-pill-count">{myJobs.length}</span>
-            </button>
-            <button
-              type="button"
-              className={`tab-pill-item ${activeTab === "discovery" ? "active" : ""}`}
-              onClick={() => setActiveTab("discovery")}
-              role="tab"
-              aria-selected={activeTab === "discovery"}
-            >
-              <span>Discovery</span>
-            </button>
+          <div className="tabs-scroll-container">
+            <div className="tabs-pill" role="tablist">
+              <button
+                type="button"
+                className={`tab-pill-item ${activeTab === "recommended" ? "active" : ""}`}
+                onClick={() => setActiveTab("recommended")}
+                role="tab"
+                aria-selected={activeTab === "recommended"}
+              >
+                <span>{t("jobs.recommendedTab", "Recommended for You")}</span>
+                <span className="tab-pill-count">{recommendedJobs.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`tab-pill-item ${activeTab === "all" ? "active" : ""}`}
+                onClick={() => setActiveTab("all")}
+                role="tab"
+                aria-selected={activeTab === "all"}
+              >
+                <span>{t("jobs.allTab", "All Opportunities")}</span>
+                <span className="tab-pill-count">{myJobs.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`tab-pill-item ${activeTab === "discovery" ? "active" : ""}`}
+                onClick={() => setActiveTab("discovery")}
+                role="tab"
+                aria-selected={activeTab === "discovery"}
+              >
+                <span>Discovery</span>
+              </button>
+            </div>
           </div>
 
           {/* Search bar */}
