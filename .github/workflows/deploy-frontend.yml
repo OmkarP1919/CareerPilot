@@ -1,0 +1,138 @@
+# CareerPilot Frontend Deployment
+#
+# Builds the production Vite bundle (same contract checks as CI) and deploys
+# it to the existing Azure Static Web App (careerpilot-web-c9f0a1, origin
+# https://happy-meadow-00d50d800.5.azurestaticapps.net) using the official
+# SWA GitHub Action with the SWA deployment token stored as a GitHub Actions
+# secret. No other Azure access or long-lived identity is required.
+#
+# Security posture (see docs/ci_cd.md):
+#   - contents: read ONLY. The workflow never requests more permissions.
+#   - Third-party actions are pinned to commit SHAs (verified against the
+#     published tags):
+#       actions/checkout@v4 -> 11d5960a326750d5838078e36cf38b85af677262
+#       actions/setup-node@v4 -> 49933ea5288caeca8642d1e84afbd3f7d6820020
+#       Azure/static-web-apps-deploy@v1 -> 1a947af9992250f3bc2e68ad0754c0b0c11566c9
+#   - Repository secrets used:
+#       AZURE_STATIC_WEB_APPS_API_TOKEN  (per-resource SWA deployment token)
+#   - Repository variables used (PUBLIC VITE_* build config, never secrets):
+#       VITE_API_BASE_URL                -> https://careerpilot-api-c9f0a1.azurewebsites.net
+#       VITE_FIREBASE_API_KEY / AUTH_DOMAIN / PROJECT_ID / STORAGE_BUCKET /
+#       VITE_FIREBASE_MESSAGING_SENDER_ID / APP_ID (the public Firebase
+#       browser configuration; see frontend/docs/deployment.md).
+#   - The bundle is built BEFORE deployment (skip_app_build: true): the SWA
+#     pipeline never rebuilds from source, so the exact dist/ validated here
+#     is what ships, and this workflow needs no Azure role assignment.
+#   - All seven public build variables are validated first; a missing value
+#     fails the job before a partial/broken bundle can be deployed.
+#   - The job fails if the deployed origin (root + a deep SPA route) does not
+#     return 200 after deployment.
+
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-frontend-main
+  cancel-in-progress: false
+
+jobs:
+  deploy-frontend:
+    name: Build and deploy frontend to Azure Static Web Apps
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Validate public build variables
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+        run: |
+          missing=""
+          for var in VITE_API_BASE_URL VITE_FIREBASE_API_KEY \
+            VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID \
+            VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID \
+            VITE_FIREBASE_APP_ID; do
+            if [ -z "${!var}" ]; then missing="$missing $var"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "Missing public build variables:$missing" >&2
+            echo "Set them as repository variables (not secrets) before deploying." >&2
+            exit 1
+          fi
+
+      - name: Run frontend contract tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Build production bundle
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+        run: npm run build
+
+      - name: Verify SWA routing config is present in the bundle
+        working-directory: frontend
+        run: test -f dist/staticwebapp.config.json
+
+      - name: Deploy to Azure Static Web Apps (production)
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9
+        with:
+          # repo_token is intentionally omitted: the deploy action uses it
+          # only for pull-request comments, and this workflow has no PR event.
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: frontend/dist
+          api_location: ""
+          output_location: ""
+          skip_app_build: true
+
+      - name: Post-deploy smoke check (root + SPA fallback)
+        run: |
+          for i in $(seq 1 30); do
+            root=$(curl -s -o /dev/null -w "%{http_code}" https://happy-meadow-00d50d800.5.azurestaticapps.net/ || true)
+            echo "attempt $i: root -> ${root}"
+            if [ "$root" = "200" ]; then
+              route=$(curl -s -o /dev/null -w "%{http_code}" https://happy-meadow-00d50d800.5.azurestaticapps.net/resumes || true)
+              echo "SPA route /resumes -> ${route}"
+              [ "$route" = "200" ]
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "frontend origin did not return 200" >&2
+          exit 1
