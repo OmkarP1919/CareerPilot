@@ -25,7 +25,12 @@ export default function TailoredResult({
 
   const jobTitle = job?.title || result.job_title || result.target_role || "Target Role";
   const jobCompany = job?.company || result.company_name || "Company";
-  const score = result.match_score || result.resume_match_score || 86;
+  const score =
+    typeof result.match_score === "number"
+      ? result.match_score
+      : typeof result.resume_match_score === "number"
+      ? result.resume_match_score
+      : null;
 
   const changes = Array.isArray(result.changes) ? result.changes : [];
   const supportedKeywords = Array.isArray(result.supported_keywords_added)
@@ -91,7 +96,27 @@ export default function TailoredResult({
           </div>
 
           <div className="tailored-score-badge">
-            <ScoreBadge score={score} size="large" />
+            {score !== null ? (
+              <ScoreBadge score={score} size="large" />
+            ) : (
+              <div
+                className="score-unavailable-badge"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "var(--space-2) var(--space-4)",
+                  background: "var(--bg-surface-hover)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-lg)",
+                  fontSize: "var(--text-sm)",
+                  color: "var(--text-secondary)",
+                  fontWeight: "var(--weight-medium)",
+                }}
+              >
+                Match score unavailable
+              </div>
+            )}
           </div>
         </div>
 
@@ -169,20 +194,9 @@ export default function TailoredResult({
                 ))}
               </ul>
             ) : (
-              <ul className="changes-bullets-list">
-                <li className="change-bullet">
-                  <CheckCircle2 size={16} className="text-success" />
-                  <span>Aligned bullet points with role requirements</span>
-                </li>
-                <li className="change-bullet">
-                  <CheckCircle2 size={16} className="text-success" />
-                  <span>Strengthened technical keyword phrasing</span>
-                </li>
-                <li className="change-bullet">
-                  <CheckCircle2 size={16} className="text-success" />
-                  <span>Highlighted relevant projects and work experiences</span>
-                </li>
-              </ul>
+              <p className="text-sm text-secondary" style={{ margin: 0 }}>
+                {t("tailor.noChangesSummary", "No detailed change summary is available.")}
+              </p>
             )}
           </div>
         </section>

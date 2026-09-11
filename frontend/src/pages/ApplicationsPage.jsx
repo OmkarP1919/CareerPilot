@@ -6,6 +6,7 @@ import EmptyState from "../components/EmptyState";
 import { SkeletonCard, SkeletonList } from "../components/Skeleton";
 import Modal from "../components/Modal";
 import CoverLetterModal from "../components/CoverLetterModal";
+import ConfirmDialog from "../components/ConfirmDialog";
 import {
   Layers,
   Plus,
@@ -301,6 +302,8 @@ function InterviewsPanel({ applicationId, notify }) {
   const [form, setForm] = useState(null);
   const [fields, setFields] = useState({ scheduled_at: "", kind: "video", status: "scheduled", notes: "" });
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -362,14 +365,22 @@ function InterviewsPanel({ applicationId, notify }) {
     }
   };
 
-  const handleDelete = async (interview) => {
-    if (!window.confirm(t("app.interviewsDeleteConfirm", "Delete this interview?"))) return;
+  const handleDelete = (interview) => {
+    setDeleteTarget(interview);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await api.deleteApplicationInterview(applicationId, interview.id);
+      await api.deleteApplicationInterview(applicationId, deleteTarget.id);
       notify(t("app.interviewsDeleted", "Interview deleted."));
+      setDeleteTarget(null);
       load();
     } catch {
       notify(t("app.interviewsDeleteFailed", "Couldn't delete the interview."), "error");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -504,6 +515,18 @@ function InterviewsPanel({ applicationId, notify }) {
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={t("app.interviewsDeleteTitle", "Delete Interview")}
+        message={t("app.interviewsDeleteConfirm", "Delete this interview?")}
+        confirmLabel={t("action.delete", "Delete")}
+        cancelLabel={t("action.cancel", "Cancel")}
+        destructive
+        loading={deleting}
+      />
     </div>
   );
 }
@@ -518,6 +541,8 @@ function DocumentsPanel({ applicationId, notify }) {
   const [uploadType, setUploadType] = useState("resume");
   const [uploadName, setUploadName] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -593,23 +618,22 @@ function DocumentsPanel({ applicationId, notify }) {
     }
   };
 
-  const handleDelete = async (doc) => {
-    if (
-      !window.confirm(
-        t(
-          "app.documentsDeleteConfirm",
-          "Remove this application document? Your original resume will not be affected."
-        )
-      )
-    ) {
-      return;
-    }
+  const handleDelete = (doc) => {
+    setDeleteTarget(doc);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await api.deleteApplicationDocument(applicationId, doc.id);
+      await api.deleteApplicationDocument(applicationId, deleteTarget.id);
       notify(t("app.documentsDeleted", "Document removed."));
+      setDeleteTarget(null);
       load();
     } catch {
       notify(t("app.documentsActionFailed", "Couldn't update documents."), "error");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -776,6 +800,21 @@ function DocumentsPanel({ applicationId, notify }) {
           </div>
         </form>
       </div>
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={t("app.documentsDeleteTitle", "Remove Document")}
+        message={t(
+          "app.documentsDeleteConfirm",
+          "Remove this application document? Your original resume will not be affected."
+        )}
+        confirmLabel={t("action.remove", "Remove")}
+        cancelLabel={t("action.cancel", "Cancel")}
+        destructive
+        loading={deleting}
+      />
     </div>
   );
 }
@@ -796,6 +835,8 @@ export default function ApplicationsPage() {
   const [detailTab, setDetailTab] = useState("overview");
   const [editNotes, setEditNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [deleteAppId, setDeleteAppId] = useState(null);
+  const [deletingApp, setDeletingApp] = useState(false);
   const [notification, setNotification] = useState(null);
 
   const notify = (msg, type = "success") => {
@@ -869,15 +910,23 @@ export default function ApplicationsPage() {
     }
   };
 
-  const handleDeleteApp = async (appId) => {
-    if (!window.confirm("Remove this application from your pipeline?")) return;
+  const handleDeleteApp = (appId) => {
+    setDeleteAppId(appId);
+  };
+
+  const confirmDeleteApp = async () => {
+    if (!deleteAppId) return;
+    setDeletingApp(true);
     try {
-      await api.delete(`/applications/${appId}`);
-      setApplications((prev) => prev.filter((a) => a.id !== appId));
-      if (selectedApp?.id === appId) setSelectedApp(null);
+      await api.delete(`/applications/${deleteAppId}`);
+      setApplications((prev) => prev.filter((a) => a.id !== deleteAppId));
+      if (selectedApp?.id === deleteAppId) setSelectedApp(null);
       notify("Application removed from pipeline.");
+      setDeleteAppId(null);
     } catch {
       notify("Failed to delete application.", "error");
+    } finally {
+      setDeletingApp(false);
     }
   };
 
@@ -1251,6 +1300,21 @@ export default function ApplicationsPage() {
           initialLetter={viewCoverLetter}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteAppId)}
+        onClose={() => !deletingApp && setDeleteAppId(null)}
+        onConfirm={confirmDeleteApp}
+        title={t("app.deleteTitle", "Remove Application")}
+        message={t(
+          "app.deleteConfirm",
+          "Remove this application from your pipeline?"
+        )}
+        confirmLabel={t("action.remove", "Remove")}
+        cancelLabel={t("action.cancel", "Cancel")}
+        destructive
+        loading={deletingApp}
+      />
     </div>
   );
 }
