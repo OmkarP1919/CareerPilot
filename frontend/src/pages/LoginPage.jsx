@@ -3,9 +3,26 @@ import { useNavigate, Link } from "react-router-dom";
 import { signInWithPopup, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider } from "../firebase";
 import { api } from "../services/api";
-import { Eye, EyeOff, Mail, Lock, ArrowRight, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, ArrowRight, AlertCircle, ShieldCheck } from "lucide-react";
 
-function getFirebaseErrorMessage(code) {
+function formatAuthError(err, defaultFallback = "Sign in failed. Please try again.") {
+  if (!err) return defaultFallback;
+
+  // Handle backend ApiError (e.g. from /auth/sync, timeout, network, or server down)
+  if (err.name === "ApiError" || err.kind) {
+    if (err.kind === "network") {
+      return "Unable to reach the backend server. Please verify the backend API is running.";
+    }
+    if (err.kind === "server") {
+      return err.message && err.message !== "Something went wrong. Please try again."
+        ? `Backend error: ${err.message}`
+        : "Backend database or server error during sync. Please verify backend database connection.";
+    }
+    return err.message || "Backend synchronization failed.";
+  }
+
+  // Handle Firebase Auth error codes
+  const code = err.code || (typeof err === "string" ? err : "");
   switch (code) {
     case "auth/invalid-credential":
     case "auth/user-not-found":
@@ -15,10 +32,22 @@ function getFirebaseErrorMessage(code) {
       return "Access temporarily disabled due to multiple failed attempts. Try again later.";
     case "auth/user-disabled":
       return "This account has been deactivated.";
+    case "auth/email-already-in-use":
+      return "An account with this email already exists. Try signing in instead.";
+    case "auth/invalid-email":
+      return "Please enter a valid email address.";
+    case "auth/weak-password":
+      return "Password should be at least 6 characters long.";
     case "auth/network-request-failed":
-      return "Network connection issue. Please check your internet.";
+      return "Network issue connecting to Firebase. Please check your internet connection.";
+    case "auth/popup-blocked":
+      return "Sign-in popup was blocked by your browser. Please allow popups for this site.";
+    case "auth/unauthorized-domain":
+      return "This domain is not authorized for OAuth in Firebase. Add localhost to Authorized Domains in Firebase Console.";
+    case "auth/operation-not-allowed":
+      return "This sign-in method is not enabled in Firebase Console.";
     default:
-      return "Sign in failed. Please try again.";
+      return err.message || defaultFallback;
   }
 }
 
@@ -47,7 +76,8 @@ export default function LoginPage() {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       await syncAndRedirect();
     } catch (err) {
-      setError(getFirebaseErrorMessage(err.code));
+      console.error("Sign in error:", err);
+      setError(formatAuthError(err, "Sign in failed. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -61,7 +91,8 @@ export default function LoginPage() {
       await syncAndRedirect();
     } catch (err) {
       if (err.code === "auth/popup-closed-by-user") return;
-      setError(getFirebaseErrorMessage(err.code));
+      console.error("Google sign-in error:", err);
+      setError(formatAuthError(err, "Google sign in failed. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -70,24 +101,26 @@ export default function LoginPage() {
   return (
     <div className="auth-form-wrapper">
       <div className="auth-form-header">
-        <h2>Welcome back</h2>
+        <h1 className="auth-title">Welcome back</h1>
         <p className="auth-subtitle">Sign in to your personal career workspace</p>
       </div>
 
       {error && (
-        <div className="alert alert-error" role="alert">
-          <AlertCircle size={16} />
+        <div id="login-error-alert" className="alert alert-error auth-alert" role="alert">
+          <AlertCircle size={16} className="flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
+      {/* Google Authentication */}
       <button
-        className="btn btn-google btn-block"
+        className="btn btn-google btn-block auth-google-btn"
         onClick={handleGoogleLogin}
         disabled={loading}
         type="button"
+        aria-label="Continue with Google"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" className="auth-google-icon">
           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
           <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
           <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -96,10 +129,11 @@ export default function LoginPage() {
         <span>Continue with Google</span>
       </button>
 
-      <div className="auth-divider">
-        <span>or with email</span>
+      <div className="auth-divider" role="separator" aria-label="Or sign in with email">
+        <span>or sign in with email</span>
       </div>
 
+      {/* Email & Password Form */}
       <form onSubmit={handleEmailLogin} className="auth-form" noValidate>
         <div className="form-group">
           <label className="form-label" htmlFor="login-email">
@@ -110,12 +144,14 @@ export default function LoginPage() {
             <input
               id="login-email"
               type="email"
-              className="form-input with-left-icon"
+              className={`form-input with-left-icon auth-input ${error ? "error" : ""}`}
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
               required
+              aria-invalid={error ? "true" : undefined}
+              aria-describedby={error ? "login-error-alert" : undefined}
             />
           </div>
         </div>
@@ -125,7 +161,7 @@ export default function LoginPage() {
             <label className="form-label" htmlFor="login-password">
               Password
             </label>
-            <Link to="/forgot-password" className="auth-forgot-link" tabIndex={0}>
+            <Link to="/forgot-password" className="auth-forgot-link">
               Forgot password?
             </Link>
           </div>
@@ -134,19 +170,20 @@ export default function LoginPage() {
             <input
               id="login-password"
               type={showPassword ? "text" : "password"}
-              className="form-input with-left-icon with-right-icon"
+              className={`form-input with-left-icon with-right-icon auth-input ${error ? "error" : ""}`}
               placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               required
+              aria-invalid={error ? "true" : undefined}
+              aria-describedby={error ? "login-error-alert" : undefined}
             />
             <button
               type="button"
-              className="input-action-btn"
+              className="input-action-btn auth-pwd-toggle"
               onClick={() => setShowPassword(!showPassword)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              tabIndex={0}
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
@@ -155,9 +192,8 @@ export default function LoginPage() {
 
         <button
           type="submit"
-          className="btn btn-primary btn-block btn-lg"
+          className="btn btn-primary btn-block btn-lg auth-submit-btn"
           disabled={loading}
-          style={{ marginTop: "var(--space-2)" }}
         >
           {loading ? (
             <>
@@ -173,11 +209,17 @@ export default function LoginPage() {
         </button>
       </form>
 
-      <div className="auth-footer">
+      {/* Switch to SignUp */}
+      <div className="auth-switch-box">
         <span>Don't have an account?</span>{" "}
-        <Link to="/signup" className="auth-footer-link">
-          Create one now
+        <Link to="/signup" className="auth-switch-link">
+          Create one free
         </Link>
+      </div>
+
+      <div className="auth-micro-trust">
+        <ShieldCheck size={13} className="text-accent flex-shrink-0" />
+        <span>Private personal workspace • Confidential records</span>
       </div>
     </div>
   );
