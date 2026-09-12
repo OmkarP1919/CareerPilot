@@ -36,7 +36,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 54px;
+  height: 50px;
   padding: 0 var(--space-6);
   border-bottom: 1px solid var(--border);
   background: var(--bg-nav);
@@ -110,7 +110,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-3) var(--space-6);
   width: 100%;
 }
 
@@ -131,7 +131,7 @@
 .auth-showcase-sidebar {
   background: var(--bg-surface-secondary);
   border-right: 1px solid var(--border);
-  padding: var(--space-10) var(--space-8);
+  padding: var(--space-6) var(--space-6);
   display: flex;
   flex-direction: column;
 }
@@ -139,9 +139,8 @@
 .auth-sidebar-inner {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   height: 100%;
-  gap: var(--space-8);
+  gap: var(--space-4);
 }
 
 .auth-sidebar-brand-pill {
@@ -177,8 +176,9 @@
 .auth-sidebar-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  margin: auto 0;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+  margin-bottom: auto;
 }
 
 .auth-sidebar-headline {
@@ -200,8 +200,8 @@
 .auth-sidebar-benefits {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
+  gap: var(--space-2-5);
+  margin-top: var(--space-1);
 }
 
 .sidebar-benefit-item {
@@ -227,7 +227,7 @@
 
 /* Form Column */
 .auth-form-column {
-  padding: var(--space-10) var(--space-8);
+  padding: var(--space-6) var(--space-6);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -241,7 +241,7 @@
 }
 
 .auth-trust-footer {
-  margin-top: var(--space-6);
+  margin-top: var(--space-2-5, 10px);
   font-size: var(--text-2xs);
   color: var(--text-tertiary);
   text-align: center;
