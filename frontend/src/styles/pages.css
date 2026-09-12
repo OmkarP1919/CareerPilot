@@ -34,7 +34,8 @@
   color: var(--text-secondary);
 }
 
-.auth-google-btn {
+.auth-google-btn,
+.auth-signin-cta-btn {
   min-height: 44px;
 }
 
@@ -151,6 +152,13 @@
 
 .auth-switch-link:hover {
   text-decoration: underline;
+}
+
+/* On desktop (>=1024px), the left sidebar is the primary Sign In action panel */
+@media (min-width: 1024px) {
+  .auth-signup-switch-box {
+    display: none;
+  }
 }
 
 .auth-terms-notice {

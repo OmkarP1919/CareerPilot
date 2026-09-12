@@ -119,7 +119,7 @@
   width: 100%;
   max-width: 960px;
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
+  grid-template-columns: 1fr 1.25fr;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
@@ -223,6 +223,80 @@
 
 .auth-sidebar-footnote {
   color: var(--text-tertiary);
+}
+
+/* Existing user Sign In panel on Signup page */
+.auth-signin-sidebar {
+  background: var(--bg-surface-secondary);
+}
+
+.auth-signin-sidebar-inner {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.auth-signin-prompt-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: auto 0;
+}
+
+.auth-signin-prompt-body .auth-sidebar-headline {
+  font-size: 1.5rem;
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.auth-signin-prompt-body .auth-sidebar-copy {
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 320px;
+}
+
+.auth-signin-action-wrap {
+  margin-top: var(--space-2);
+}
+
+.btn.auth-signin-cta-btn,
+.auth-signin-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  height: 44px;
+  padding: 0 var(--space-6);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border);
+  text-decoration: none;
+  transition: all var(--duration-fast) var(--ease-default);
+  box-shadow: var(--shadow-xs);
+}
+
+.auth-signin-cta-btn:hover {
+  color: var(--accent);
+  background: var(--accent-light);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.auth-signin-cta-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Form Column */

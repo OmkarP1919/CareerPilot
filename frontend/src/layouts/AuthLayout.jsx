@@ -6,6 +6,7 @@ import {
   Sun,
   Moon,
   ArrowLeft,
+  ArrowRight,
   Briefcase,
 } from "lucide-react";
 
@@ -46,57 +47,93 @@ export default function AuthLayout() {
       <main className="auth-main-area" id="auth-main-content">
         <div className="auth-layout-container">
           {/* Subtle Desktop Value Sidebar (>=1024px only) */}
-          <aside className="auth-showcase-sidebar" aria-label="CareerPilot Benefits">
-            <div className="auth-sidebar-inner">
-              <div className="auth-sidebar-header">
-                <div className="auth-sidebar-brand-pill">
-                  <span className="auth-logo-mark-sm">
-                    <span className="auth-logo-dot-sm" />
+          {isSignup ? (
+            <aside className="auth-showcase-sidebar auth-signin-sidebar" aria-label="Existing User Sign In">
+              <div className="auth-sidebar-inner auth-signin-sidebar-inner">
+                <div className="auth-sidebar-header">
+                  <div className="auth-sidebar-brand-pill">
+                    <span className="auth-logo-mark-sm">
+                      <span className="auth-logo-dot-sm" />
+                    </span>
+                    <span>Account Access</span>
+                  </div>
+                </div>
+
+                <div className="auth-sidebar-body auth-signin-prompt-body">
+                  <h2 className="auth-sidebar-headline">Already have an account?</h2>
+                  <p className="auth-sidebar-copy">
+                    Sign in to access your saved roles, customized fit analysis, and synchronized application tracker.
+                  </p>
+                  <div className="auth-signin-action-wrap">
+                    <Link
+                      to="/login"
+                      className="btn auth-signin-cta-btn"
+                      id="auth-switch-to-login"
+                      aria-label="Sign in to your existing account"
+                    >
+                      <span>Sign In</span>
+                      <ArrowRight size={16} aria-hidden="true" />
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="auth-sidebar-footer">
+                  <ShieldCheck size={14} className="text-tertiary flex-shrink-0" />
+                  <span className="auth-sidebar-footnote">
+                    Private personal workspace • Secure authentication
                   </span>
-                  <span>{isForgot ? "Account Security" : "Career Intelligence"}</span>
                 </div>
               </div>
-
-              <div className="auth-sidebar-body">
-                <h2 className="auth-sidebar-headline">
-                  {isForgot
-                    ? "Secure account recovery."
-                    : isSignup
-                    ? "Start applying with complete clarity."
-                    : "Welcome back to your career workspace."}
-                </h2>
-                <p className="auth-sidebar-copy">
-                  {isForgot
-                    ? "Enter your registered email address to securely restore access to your career workspace, saved opportunities, and tailored resumes."
-                    : isSignup
-                    ? "Discover verified opportunities, evaluate honest 5-factor fit scores, and tailor resumes safely without fabricated experience."
-                    : "Access your saved roles, customized fit analysis, and synchronized application tracker."}
-                </p>
-
-                <div className="auth-sidebar-benefits">
-                  <div className="sidebar-benefit-item">
-                    <CheckCircle2 size={16} className="text-accent flex-shrink-0" />
-                    <span>Transparent 5-factor fit scoring</span>
-                  </div>
-                  <div className="sidebar-benefit-item">
-                    <ShieldCheck size={16} className="text-accent flex-shrink-0" />
-                    <span>Fact-preserving resume tailoring</span>
-                  </div>
-                  <div className="sidebar-benefit-item">
-                    <Briefcase size={16} className="text-accent flex-shrink-0" />
-                    <span>Unified application tracking pipeline</span>
+            </aside>
+          ) : (
+            <aside className="auth-showcase-sidebar" aria-label="CareerPilot Benefits">
+              <div className="auth-sidebar-inner">
+                <div className="auth-sidebar-header">
+                  <div className="auth-sidebar-brand-pill">
+                    <span className="auth-logo-mark-sm">
+                      <span className="auth-logo-dot-sm" />
+                    </span>
+                    <span>{isForgot ? "Account Security" : "Career Intelligence"}</span>
                   </div>
                 </div>
-              </div>
 
-              <div className="auth-sidebar-footer">
-                <ShieldCheck size={14} className="text-tertiary flex-shrink-0" />
-                <span className="auth-sidebar-footnote">
-                  Private & secure • Zero fabricated credentials
-                </span>
+                <div className="auth-sidebar-body">
+                  <h2 className="auth-sidebar-headline">
+                    {isForgot
+                      ? "Secure account recovery."
+                      : "Welcome back to your career workspace."}
+                  </h2>
+                  <p className="auth-sidebar-copy">
+                    {isForgot
+                      ? "Enter your registered email address to securely restore access to your career workspace, saved opportunities, and tailored resumes."
+                      : "Access your saved roles, customized fit analysis, and synchronized application tracker."}
+                  </p>
+
+                  <div className="auth-sidebar-benefits">
+                    <div className="sidebar-benefit-item">
+                      <CheckCircle2 size={16} className="text-accent flex-shrink-0" />
+                      <span>Transparent 5-factor fit scoring</span>
+                    </div>
+                    <div className="sidebar-benefit-item">
+                      <ShieldCheck size={16} className="text-accent flex-shrink-0" />
+                      <span>Fact-preserving resume tailoring</span>
+                    </div>
+                    <div className="sidebar-benefit-item">
+                      <Briefcase size={16} className="text-accent flex-shrink-0" />
+                      <span>Unified application tracking pipeline</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="auth-sidebar-footer">
+                  <ShieldCheck size={14} className="text-tertiary flex-shrink-0" />
+                  <span className="auth-sidebar-footnote">
+                    Private & secure • Zero fabricated credentials
+                  </span>
+                </div>
               </div>
-            </div>
-          </aside>
+            </aside>
+          )}
 
           {/* Form Column */}
           <section className="auth-form-column" aria-label="Authentication Form">

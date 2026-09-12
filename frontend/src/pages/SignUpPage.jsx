@@ -289,7 +289,7 @@ export default function SignUpPage() {
       </form>
 
       {/* Switch to Login */}
-      <div className="auth-switch-box">
+      <div className="auth-switch-box auth-signup-switch-box">
         <span>Already have an account?</span>{" "}
         <Link to="/login" className="auth-switch-link">
           Sign in
