@@ -244,6 +244,29 @@
   color: var(--text-primary);
 }
 
+.landing-logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--color-white);
+}
+
+.landing-logo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-white);
+}
+
+.landing-logo-text {
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+}
+
 .landing-nav-links {
   display: flex;
   align-items: center;
