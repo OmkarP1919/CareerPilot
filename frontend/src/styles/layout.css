@@ -110,7 +110,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-2) var(--space-6);
   width: 100%;
 }
 
@@ -131,7 +131,7 @@
 .auth-showcase-sidebar {
   background: var(--bg-surface-secondary);
   border-right: 1px solid var(--border);
-  padding: var(--space-6) var(--space-6);
+  padding: var(--space-4) var(--space-6);
   display: flex;
   flex-direction: column;
 }
@@ -176,13 +176,13 @@
 .auth-sidebar-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2-5);
   margin-top: var(--space-1);
   margin-bottom: auto;
 }
 
 .auth-sidebar-headline {
-  font-size: var(--text-2xl);
+  font-size: 1.375rem;
   font-weight: var(--weight-bold);
   line-height: var(--leading-tight);
   letter-spacing: var(--tracking-tight);
@@ -191,7 +191,7 @@
 }
 
 .auth-sidebar-copy {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   line-height: var(--leading-relaxed);
   color: var(--text-secondary);
   margin: 0;
@@ -200,7 +200,7 @@
 .auth-sidebar-benefits {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2-5);
+  gap: var(--space-2);
   margin-top: var(--space-1);
 }
 
@@ -227,7 +227,7 @@
 
 /* Form Column */
 .auth-form-column {
-  padding: var(--space-6) var(--space-6);
+  padding: var(--space-4) var(--space-6);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -241,7 +241,7 @@
 }
 
 .auth-trust-footer {
-  margin-top: var(--space-2-5, 10px);
+  margin-top: var(--space-2, 8px);
   font-size: var(--text-2xs);
   color: var(--text-tertiary);
   text-align: center;
@@ -932,7 +932,7 @@
   }
 
   .auth-form-column {
-    padding: var(--space-8) var(--space-6);
+    padding: var(--space-6) var(--space-6);
   }
 }
 
