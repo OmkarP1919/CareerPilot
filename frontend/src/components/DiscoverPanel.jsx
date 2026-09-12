@@ -17,15 +17,15 @@ import {
   Clock,
 } from "lucide-react";
 
-const WORK_MODES = ["", "Remote", "Hybrid", "Onsite"];
-const POSTED_OPTIONS = [
+export const WORK_MODES = ["", "Remote", "Hybrid", "Onsite"];
+export const POSTED_OPTIONS = [
   { value: "", label: "Any time" },
   { value: "7", label: "Past week" },
   { value: "14", label: "Past 2 weeks" },
   { value: "30", label: "Past month" },
 ];
 
-const DEFAULT_FILTERS = {
+export const DEFAULT_FILTERS = {
   query: "",
   location: "",
   remote: "",
@@ -35,15 +35,18 @@ const DEFAULT_FILTERS = {
   sources: [],
 };
 
-function postedAfterDays(days) {
+export function postedAfterDays(days) {
   if (!days) return null;
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - Number(days));
   return d.toISOString();
 }
 
-export default function DiscoverPanel() {
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+export default function DiscoverPanel({ query, onQueryChange, searchTrigger }) {
+  const [filters, setFilters] = useState(() => ({
+    ...DEFAULT_FILTERS,
+    query: query || "",
+  }));
   const [availableSources, setAvailableSources] = useState([]);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
@@ -81,33 +84,43 @@ export default function DiscoverPanel() {
     loadSavedSearches();
   }, [loadSources, loadSavedSearches]);
 
-  const hasActiveFilters = useMemo(
-    () =>
-      filters.query ||
+  useEffect(() => {
+    if (query !== undefined) {
+      setFilters((f) => (f.query === query ? f : { ...f, query }));
+    }
+  }, [query]);
+
+  const hasActiveFilters = useMemo(() => {
+    const effectiveQuery = query !== undefined ? query : filters.query;
+    return Boolean(
+      effectiveQuery ||
       filters.location ||
       filters.remote ||
       filters.salary_min ||
       filters.salary_max ||
       filters.posted ||
-      filters.sources.length > 0,
-    [filters]
-  );
+      filters.sources.length > 0
+    );
+  }, [query, filters]);
 
-  const buildRequest = () => ({
-    queries: filters.query ? [filters.query] : [],
-    locations: filters.location ? [filters.location] : [],
-    remote: filters.remote === "Remote" ? true : filters.remote === "Onsite" ? false : null,
-    salary_min: filters.salary_min ? Number(filters.salary_min) : null,
-    salary_max: filters.salary_max ? Number(filters.salary_max) : null,
-    salary_period: "annual",
-    posted_after: postedAfterDays(filters.posted),
-    sort: "newest",
-    sources: filters.sources,
-    page_size: 30,
-    include_profile_alignment: true,
-  });
+  const buildRequest = useCallback(() => {
+    const effectiveQuery = (query !== undefined ? query : filters.query).trim();
+    return {
+      queries: effectiveQuery ? [effectiveQuery] : [],
+      locations: filters.location ? [filters.location.trim()] : [],
+      remote: filters.remote === "Remote" ? true : filters.remote === "Onsite" ? false : null,
+      salary_min: filters.salary_min ? Number(filters.salary_min) : null,
+      salary_max: filters.salary_max ? Number(filters.salary_max) : null,
+      salary_period: "annual",
+      posted_after: postedAfterDays(filters.posted),
+      sort: "newest",
+      sources: filters.sources,
+      page_size: 30,
+      include_profile_alignment: true,
+    };
+  }, [query, filters]);
 
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     if (loading) return;
     setLoading(true);
     setError(null);
@@ -120,7 +133,13 @@ export default function DiscoverPanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loading, buildRequest]);
+
+  useEffect(() => {
+    if (searchTrigger) {
+      handleSearch();
+    }
+  }, [searchTrigger, handleSearch]);
 
   const toggleSource = (name) => {
     setFilters((f) => ({
@@ -186,22 +205,24 @@ export default function DiscoverPanel() {
       <section className="discover-filters card">
         <div className="discover-filters-title">
           <Search size={16} />
-          <span>Filtered Job Search</span>
+          <span>{query !== undefined ? "Search Filters & Criteria" : "Filtered Job Search"}</span>
         </div>
 
         <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label" htmlFor="disc-query">Job title / keyword</label>
-            <input
-              id="disc-query"
-              type="text"
-              className="form-input"
-              placeholder="e.g. Backend Developer"
-              value={filters.query}
-              onChange={(e) => setFilters({ ...filters, query: e.target.value })}
-            />
-          </div>
-          <div className="form-group">
+          {query === undefined && (
+            <div className="form-group">
+              <label className="form-label" htmlFor="disc-query">Job title / keyword</label>
+              <input
+                id="disc-query"
+                type="text"
+                className="form-input"
+                placeholder="e.g. Backend Developer"
+                value={filters.query}
+                onChange={(e) => setFilters({ ...filters, query: e.target.value })}
+              />
+            </div>
+          )}
+          <div className="form-group" style={query !== undefined ? { gridColumn: "1 / -1" } : undefined}>
             <label className="form-label" htmlFor="disc-location">Location</label>
             <input
               id="disc-location"
@@ -312,7 +333,10 @@ export default function DiscoverPanel() {
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => setFilters(DEFAULT_FILTERS)}
+              onClick={() => {
+                setFilters(DEFAULT_FILTERS);
+                onQueryChange?.("");
+              }}
             >
               Reset
             </button>
@@ -440,7 +464,7 @@ export default function DiscoverPanel() {
   );
 }
 
-function DiscoverCard({ job }) {
+export function DiscoverCard({ job }) {
   const match = job.match;
   const score = match?.overall_score || 0;
   const reasons = match?.reasons || [];

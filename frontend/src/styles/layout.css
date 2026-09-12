@@ -8,6 +8,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   background-color: var(--bg-app);
 }
 
@@ -16,7 +17,7 @@
   width: 100%;
   max-width: var(--max-content);
   margin: 0 auto;
-  padding: calc(var(--nav-height) + var(--space-6)) var(--space-6) var(--space-16);
+  padding: var(--space-5) var(--space-6) var(--space-8);
 }
 
 /* === Authentication Layout (Split Left & Right) === */
@@ -865,8 +866,8 @@ html[data-theme="dark"] .auth-interactive-banner {
   }
 
   .main-content {
-    padding-top: calc(var(--nav-height) + var(--space-4));
-    padding-bottom: calc(var(--mobile-nav-height) + var(--space-8) + env(safe-area-inset-bottom, 0px));
+    padding-top: var(--space-4);
+    padding-bottom: calc(var(--mobile-nav-height) + var(--space-4) + env(safe-area-inset-bottom, 0px));
     padding-left: var(--space-4);
     padding-right: var(--space-4);
   }
@@ -1005,15 +1006,22 @@ html[data-theme="dark"] .auth-interactive-banner {
 }
 
 .app-shell-container {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   width: 100%;
+  padding-top: var(--nav-height);
+  min-height: 0;
 }
 
 @media (min-width: 1024px) {
   .app-layout-with-sidebar .app-shell-container {
     display: flex;
-    min-height: calc(100vh - var(--nav-height));
-    margin-top: var(--nav-height);
+    flex-direction: row;
+    padding-top: var(--nav-height);
+    margin-top: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
     width: 100%;
   }
 
@@ -1025,6 +1033,8 @@ html[data-theme="dark"] .auth-interactive-banner {
     position: sticky;
     top: var(--nav-height);
     height: calc(100vh - var(--nav-height));
+    height: calc(100dvh - var(--nav-height));
+    align-self: flex-start;
     background: var(--bg-surface);
     border-right: 1px solid var(--border);
     overflow-y: auto;
@@ -1185,7 +1195,7 @@ html[data-theme="dark"] .auth-interactive-banner {
 
   /* Main content desktop adjustments */
   .app-layout-with-sidebar .app-shell-container .main-content {
-    padding: var(--space-6) var(--space-6) var(--space-16);
+    padding: var(--space-5) var(--space-6) var(--space-8);
     flex: 1;
     min-width: 0;
     max-width: var(--max-content);

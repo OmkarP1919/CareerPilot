@@ -10,6 +10,7 @@ import TailoredResult from "../components/TailoredResult";
 import CoverLetterModal from "../components/CoverLetterModal";
 import {
   ArrowLeft,
+  ArrowRight,
   MapPin,
   ExternalLink,
   Sparkles,
@@ -168,7 +169,16 @@ export default function JobDetailsPage() {
   }
 
   const overallScore = matchData?.overall_score ?? job.match_score ?? 0;
-  const factorScores = matchData
+  const hasDetailedMatch = Boolean(
+    matchData &&
+      (matchData.skills_score !== undefined ||
+        matchData.project_score !== undefined ||
+        matchData.experience_score !== undefined ||
+        matchData.role_score !== undefined ||
+        matchData.location_score !== undefined)
+  );
+
+  const factorScores = hasDetailedMatch
     ? {
         skills: matchData.skills_score ?? 0,
         projects: matchData.project_score ?? 0,
@@ -176,13 +186,7 @@ export default function JobDetailsPage() {
         role: matchData.role_score ?? 0,
         location: matchData.location_score ?? 0,
       }
-    : {
-        skills: 90,
-        projects: 85,
-        experience: 75,
-        role: 88,
-        location: 95,
-      };
+    : null;
 
   const matchedSkills = matchData?.matched_skills || job.required_skills?.slice(0, 4) || [];
   const missingSkills = matchData?.missing_skills || [];
@@ -315,7 +319,7 @@ export default function JobDetailsPage() {
             role="tab"
             aria-selected={activeTab === "fit"}
           >
-            <span>{t("jobDetail.yourFit", "Your Fit")} ({overallScore}%)</span>
+            <span>{t("jobDetail.yourFit", "Your Fit")}{overallScore > 0 ? ` (${overallScore}%)` : ""}</span>
           </button>
 
           <button
@@ -382,13 +386,23 @@ export default function JobDetailsPage() {
               <div>
                 <span className="section-eyebrow">YOUR FIT</span>
                 <div className="fit-score-display">
-                  <span className="fit-score-number font-mono">{overallScore}%</span>
-                  <span className="fit-score-badge">
-                    {overallScore >= 80 ? "Excellent Match" : overallScore >= 60 ? "Strong Match" : "Moderate Match"}
-                  </span>
+                  {overallScore > 0 ? (
+                    <>
+                      <span className="fit-score-number font-mono">{overallScore}%</span>
+                      <span className="fit-score-badge">
+                        {overallScore >= 80 ? "Excellent Match" : overallScore >= 60 ? "Strong Match" : "Moderate Match"}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="fit-score-badge" style={{ fontSize: "0.875rem", padding: "4px 10px" }}>
+                      Not Yet Calculated
+                    </span>
+                  )}
                 </div>
                 <p className="fit-hero-desc">
-                  Based on your verified skills, projects, and work history compared to this position.
+                  {factorScores
+                    ? "Based on your verified skills, projects, and work history compared to this position."
+                    : "Detailed fit breakdown has not been calculated yet. Run match analysis to evaluate your skills, projects, and experience against this role."}
                 </p>
               </div>
 
@@ -402,58 +416,80 @@ export default function JobDetailsPage() {
               </button>
             </div>
 
-            {/* Horizontal Factor Bars */}
-            <div className="fit-factors-bars">
-              <div className="factor-bar-item">
-                <div className="factor-bar-header">
-                  <span>{t("jobDetail.skills", "Skills")}</span>
-                  <span className="font-mono">{factorScores.skills || 0}%</span>
-                </div>
-                <div className="score-bar-track">
-                  <div className="score-bar-fill" style={{ width: `${factorScores.skills || 0}%`, background: "var(--accent)" }} />
-                </div>
-              </div>
+            {factorScores ? (
+              <>
+                {/* Horizontal Factor Bars */}
+                <div className="fit-factors-bars">
+                  <div className="factor-bar-item">
+                    <div className="factor-bar-header">
+                      <span>{t("jobDetail.skills", "Skills")}</span>
+                      <span className="font-mono">{factorScores.skills || 0}%</span>
+                    </div>
+                    <div className="score-bar-track">
+                      <div className="score-bar-fill" style={{ width: `${factorScores.skills || 0}%`, background: "var(--accent)" }} />
+                    </div>
+                  </div>
 
-              <div className="factor-bar-item">
-                <div className="factor-bar-header">
-                  <span>{t("jobDetail.projects", "Projects")}</span>
-                  <span className="font-mono">{factorScores.projects || 0}%</span>
-                </div>
-                <div className="score-bar-track">
-                  <div className="score-bar-fill" style={{ width: `${factorScores.projects || 0}%`, background: "var(--accent)" }} />
-                </div>
-              </div>
+                  <div className="factor-bar-item">
+                    <div className="factor-bar-header">
+                      <span>{t("jobDetail.projects", "Projects")}</span>
+                      <span className="font-mono">{factorScores.projects || 0}%</span>
+                    </div>
+                    <div className="score-bar-track">
+                      <div className="score-bar-fill" style={{ width: `${factorScores.projects || 0}%`, background: "var(--accent)" }} />
+                    </div>
+                  </div>
 
-              <div className="factor-bar-item">
-                <div className="factor-bar-header">
-                  <span>{t("jobDetail.experience", "Experience")}</span>
-                  <span className="font-mono">{factorScores.experience || 0}%</span>
-                </div>
-                <div className="score-bar-track">
-                  <div className="score-bar-fill" style={{ width: `${factorScores.experience || 0}%`, background: "var(--accent)" }} />
-                </div>
-              </div>
+                  <div className="factor-bar-item">
+                    <div className="factor-bar-header">
+                      <span>{t("jobDetail.experience", "Experience")}</span>
+                      <span className="font-mono">{factorScores.experience || 0}%</span>
+                    </div>
+                    <div className="score-bar-track">
+                      <div className="score-bar-fill" style={{ width: `${factorScores.experience || 0}%`, background: "var(--accent)" }} />
+                    </div>
+                  </div>
 
-              <div className="factor-bar-item">
-                <div className="factor-bar-header">
-                  <span>{t("jobDetail.role", "Role Alignment")}</span>
-                  <span className="font-mono">{factorScores.role || 0}%</span>
-                </div>
-                <div className="score-bar-track">
-                  <div className="score-bar-fill" style={{ width: `${factorScores.role || 0}%`, background: "var(--accent)" }} />
-                </div>
-              </div>
+                  <div className="factor-bar-item">
+                    <div className="factor-bar-header">
+                      <span>{t("jobDetail.role", "Role Alignment")}</span>
+                      <span className="font-mono">{factorScores.role || 0}%</span>
+                    </div>
+                    <div className="score-bar-track">
+                      <div className="score-bar-fill" style={{ width: `${factorScores.role || 0}%`, background: "var(--accent)" }} />
+                    </div>
+                  </div>
 
-              <div className="factor-bar-item">
-                <div className="factor-bar-header">
-                  <span>{t("jobDetail.location", "Location")}</span>
-                  <span className="font-mono">{factorScores.location || 0}%</span>
+                  <div className="factor-bar-item">
+                    <div className="factor-bar-header">
+                      <span>{t("jobDetail.location", "Location")}</span>
+                      <span className="font-mono">{factorScores.location || 0}%</span>
+                    </div>
+                    <div className="score-bar-track">
+                      <div className="score-bar-fill" style={{ width: `${factorScores.location || 0}%`, background: "var(--accent)" }} />
+                    </div>
+                  </div>
                 </div>
-                <div className="score-bar-track">
-                  <div className="score-bar-fill" style={{ width: `${factorScores.location || 0}%`, background: "var(--accent)" }} />
+
+                <div style={{ marginTop: "var(--space-4)", display: "flex", justifyContent: "flex-end" }}>
+                  <Link
+                    to={`/discover/${id}/match`}
+                    className="btn btn-ghost btn-sm"
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+                  >
+                    <span>See full match analysis</span>
+                    <ArrowRight size={14} />
+                  </Link>
                 </div>
+              </>
+            ) : (
+              <div style={{ marginTop: "var(--space-4)", display: "flex", gap: "var(--space-3)", flexWrap: "wrap", alignItems: "center" }}>
+                <Link to={`/discover/${id}/match`} className="btn btn-primary">
+                  <Sparkles size={16} />
+                  <span>Run match analysis to see your fit breakdown</span>
+                </Link>
               </div>
-            </div>
+            )}
           </section>
 
           {/* Why you match vs Missing skills */}

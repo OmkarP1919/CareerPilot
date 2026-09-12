@@ -1,17 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../services/api";
 import { useTranslation } from "../context/LanguageContext";
 import ScoreBadge from "../components/ScoreBadge";
 import EmptyState from "../components/EmptyState";
-import DiscoverPanel from "../components/DiscoverPanel";
+import { DiscoverCard, WORK_MODES, POSTED_OPTIONS } from "../components/DiscoverPanel";
 import { SkeletonCard } from "../components/Skeleton";
 import Modal from "../components/Modal";
+import { useJobSearch } from "../hooks/useJobSearch";
 import {
   Search,
   Compass,
   Sparkles,
-  Plus,
   Bookmark,
   BookmarkCheck,
   CheckCircle2,
@@ -21,6 +21,11 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  MoreHorizontal,
+  SlidersHorizontal,
+  Play,
+  Trash2,
+  ListChecks,
 } from "lucide-react";
 
 const EMPLOYMENT_TYPES = ["Full-time", "Part-time", "Contract", "Internship", "Freelance"];
@@ -44,13 +49,44 @@ export default function JobsPage() {
   const [savedJobIds, setSavedJobIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
-  // Search & Filters
+  // Search input and view state machine: "initial" | "searching" | "external" | "error"
   const [search, setSearch] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  const [view, setView] = useState("initial");
+
+  // Filters (internal and discovery)
   const [typeFilter, setTypeFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
-  const [activeTab, setActiveTab] = useState("recommended"); // "recommended" | "all"
 
-  // Discovery state
+  // Hook for discovery / external search & saved searches
+  const {
+    discoverFilters,
+    setDiscoverFilters,
+    availableSources,
+    discoverLoading,
+    discoverReport,
+    discoverError,
+    savedSearches,
+    saveName,
+    setSaveName,
+    showSaveInput,
+    setShowSaveInput,
+    hasActiveDiscoverFilters,
+    handleExternalSearch,
+    toggleSource,
+    handleSaveSearch,
+    handleRunSaved,
+    handleDeleteSaved,
+    resetDiscoverFilters,
+  } = useJobSearch();
+
+  // Progressive disclosure panels
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [showSavedSearches, setShowSavedSearches] = useState(false);
+
+  // Discovery feedback state
   const [discovering, setDiscovering] = useState(false);
   const [discoveryResult, setDiscoveryResult] = useState(null);
   const [showSearchTerms, setShowSearchTerms] = useState(false);
@@ -60,6 +96,10 @@ export default function JobsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [savingJob, setSavingJob] = useState(false);
   const [notification, setNotification] = useState(null);
+
+  const filterPanelRef = useRef(null);
+  const moreMenuRef = useRef(null);
+  const savedSearchesSectionRef = useRef(null);
 
   const notify = (msg, type = "success") => {
     setNotification({ msg, type });
@@ -94,7 +134,7 @@ export default function JobsPage() {
       setMyJobs(jobsList);
       setRecommendedJobs(normalizedRecs);
       setSavedJobIds(new Set(appsList.map((a) => a.job_id)));
-    } catch (err) {
+    } catch {
       notify("Could not load opportunities. Please try again.", "error");
     } finally {
       setLoading(false);
@@ -104,6 +144,45 @@ export default function JobsPage() {
   useEffect(() => {
     fetchJobs();
   }, [fetchJobs]);
+
+  // Click outside to close dropdowns / Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setFilterOpen(false);
+        setMoreMenuOpen(false);
+      }
+    };
+    const handleClickOutside = (e) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+        setMoreMenuOpen(false);
+      }
+      if (
+        filterOpen &&
+        window.innerWidth > 640 &&
+        filterPanelRef.current &&
+        !filterPanelRef.current.contains(e.target) &&
+        !e.target.closest(".jobs-filter-trigger")
+      ) {
+        setFilterOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleClickOutside);
+
+    if (filterOpen && window.innerWidth <= 640) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.body.style.overflow = "";
+    };
+  }, [filterOpen]);
 
   const hasSourceErrors = (errors) =>
     Array.isArray(errors) &&
@@ -230,21 +309,62 @@ export default function JobsPage() {
 
       if (result.refresh) {
         await fetchJobs();
-        setActiveTab("recommended");
+        setView("initial");
       }
     } catch (err) {
-      console.error("[Discovery Error]", err);
       setDiscoveryResult(mapDiscoveryError(err));
     } finally {
       setDiscovering(false);
     }
   };
 
+  // Search submission -> external discovery
+  const triggerExternalSearch = async (queryToSearch) => {
+    const q = queryToSearch !== undefined ? queryToSearch : search;
+    const trimmed = q.trim();
+    if (!trimmed && !hasActiveDiscoverFilters) {
+      // If blank search and no discover filters, return to initial
+      setView("initial");
+      setSubmittedQuery("");
+      return;
+    }
+
+    setSubmittedQuery(trimmed);
+    setView("searching");
+    try {
+      const res = await handleExternalSearch(trimmed);
+      if (res) {
+        setView("external");
+      } else {
+        setView("external");
+      }
+    } catch {
+      setView("error");
+    }
+  };
+
+  const handleSearchSubmit = (e) => {
+    e?.preventDefault();
+    triggerExternalSearch(search);
+  };
+
+  const handleClearSearch = () => {
+    setSearch("");
+    setSubmittedQuery("");
+    setView("initial");
+  };
+
+  const handleBackToRecommended = () => {
+    setView("initial");
+    setSearch("");
+    setSubmittedQuery("");
+    resetDiscoverFilters();
+  };
+
   const handleToggleSave = async (job) => {
     const isSaved = savedJobIds.has(job.id);
     try {
       if (isSaved) {
-        // Find application ID and remove
         const apps = await api.get("/applications/");
         const app = Array.isArray(apps) ? apps.find((a) => a.job_id === job.id) : null;
         if (app) {
@@ -261,7 +381,7 @@ export default function JobsPage() {
         setSavedJobIds((prev) => new Set([...prev, job.id]));
         notify("Job saved to your applications pipeline.");
       }
-    } catch (err) {
+    } catch {
       notify("Failed to update application status.", "error");
     }
   };
@@ -288,29 +408,65 @@ export default function JobsPage() {
       setShowAddModal(false);
       setForm(EMPTY_FORM);
       await fetchJobs();
-    } catch (err) {
+    } catch {
       notify("Failed to create custom opportunity.", "error");
     } finally {
       setSavingJob(false);
     }
   };
 
-  // Filter list
-  const currentList = activeTab === "recommended" ? recommendedJobs : myJobs;
+  // Internal jobs filtering (when in initial view, responsive client-side filtering while typing)
+  const currentInitialList = useMemo(() => {
+    return recommendedJobs.length > 0 ? recommendedJobs : myJobs;
+  }, [recommendedJobs, myJobs]);
 
-  const filteredJobs = currentList.filter((job) => {
-    const matchSearch =
-      !search ||
-      job.title?.toLowerCase().includes(search.toLowerCase()) ||
-      job.company?.toLowerCase().includes(search.toLowerCase()) ||
-      (Array.isArray(job.required_skills) &&
-        job.required_skills.some((s) => s.toLowerCase().includes(search.toLowerCase())));
+  const filteredInternalJobs = useMemo(() => {
+    return currentInitialList.filter((job) => {
+      const q = search.toLowerCase();
+      const matchSearch =
+        !search ||
+        job.title?.toLowerCase().includes(q) ||
+        job.company?.toLowerCase().includes(q) ||
+        (Array.isArray(job.required_skills) &&
+          job.required_skills.some((s) => s.toLowerCase().includes(q)));
 
-    const matchType = !typeFilter || job.employment_type === typeFilter;
-    const matchLevel = !levelFilter || job.experience_level === levelFilter;
+      const matchType = !typeFilter || job.employment_type === typeFilter;
+      const matchLevel = !levelFilter || job.experience_level === levelFilter;
 
-    return matchSearch && matchType && matchLevel;
-  });
+      return matchSearch && matchType && matchLevel;
+    });
+  }, [currentInitialList, search, typeFilter, levelFilter]);
+
+  // Active filter count for badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (view === "initial") {
+      if (typeFilter) count++;
+      if (levelFilter) count++;
+    }
+    if (discoverFilters.location) count++;
+    if (discoverFilters.remote) count++;
+    if (discoverFilters.posted) count++;
+    if (discoverFilters.salary_min) count++;
+    if (discoverFilters.salary_max) count++;
+    if (discoverFilters.sources.length > 0) count++;
+    return count;
+  }, [view, typeFilter, levelFilter, discoverFilters]);
+
+  const externalResults = useMemo(() => {
+    return Array.isArray(discoverReport?.results) ? discoverReport.results : [];
+  }, [discoverReport]);
+
+  const duplicateCount = discoverReport?.duplicate_count || 0;
+
+  const handleOpenSavedSearchesFromMenu = () => {
+    setMoreMenuOpen(false);
+    setFilterOpen(true);
+    setShowSavedSearches(true);
+    setTimeout(() => {
+      savedSearchesSectionRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 150);
+  };
 
   return (
     <div className="page jobs-page">
@@ -321,160 +477,101 @@ export default function JobsPage() {
         </div>
       )}
 
-      {/* Header */}
-      <header className="page-header">
+      {/* ZONE A: Page Identity + Primary Actions */}
+      <header className="page-header jobs-page-header">
         <div className="page-header-row">
-          <div>
-            <h1>{t("jobs.title", "Find Jobs")}</h1>
-            <p>{t("jobs.subtitle", "Discover opportunities that fit your skills and career goals.")}</p>
+          <div className="jobs-title-wrap">
+            <h1 className="jobs-page-title">{t("jobs.title", "Find Jobs")}</h1>
           </div>
 
-          <div className="page-header-actions">
-            <button
-              className="btn btn-secondary"
-              onClick={() => setShowAddModal(true)}
-              type="button"
-            >
-              <Plus size={16} />
-              <span>Add Target Role</span>
-            </button>
+          <div className="page-header-actions jobs-header-actions">
+            {/* Desktop: Primary personalized action */}
+            <div className="jobs-find-for-me-desktop">
+              <div className="jobs-find-btn-row">
+                <button
+                  className="btn btn-primary jobs-find-desktop-btn"
+                  onClick={handlePersonalizedDiscovery}
+                  disabled={discovering}
+                  type="button"
+                  aria-label="Find Jobs for Me"
+                >
+                  {discovering ? (
+                    <>
+                      <span className="spinner-inline" />
+                      <span>Finding matches...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} />
+                      <span>{t("action.findJobsForMe", "Find Jobs for Me")}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <span className="jobs-find-sublabel">Let AI match jobs to your profile</span>
+            </div>
 
-            <button
-              className="btn btn-primary"
-              onClick={handlePersonalizedDiscovery}
-              disabled={discovering}
-              type="button"
-            >
-              {discovering ? (
-                <>
-                  <span className="spinner-inline" />
-                  <span>Finding opportunities...</span>
-                </>
-              ) : (
-                <>
-                  <Compass size={16} />
-                  <span>{t("action.findJobsForMe", "Find Jobs for Me")}</span>
-                </>
+            {/* Overflow More Menu (•••) */}
+            <div className="jobs-more-menu-wrap" ref={moreMenuRef}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-icon jobs-more-trigger"
+                onClick={() => setMoreMenuOpen((p) => !p)}
+                aria-label="More options"
+                aria-expanded={moreMenuOpen}
+                aria-haspopup="true"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+
+              {moreMenuOpen && (
+                <div className="jobs-more-dropdown" role="menu">
+                  <button
+                    type="button"
+                    className="jobs-more-menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      setShowAddModal(true);
+                    }}
+                  >
+                    Add Target Role
+                  </button>
+                  <button
+                    type="button"
+                    className="jobs-more-menu-item"
+                    role="menuitem"
+                    onClick={handleOpenSavedSearchesFromMenu}
+                  >
+                    My Saved Searches
+                  </button>
+                </div>
               )}
-            </button>
+            </div>
           </div>
         </div>
-
-        {/* Discovery feedback banner */}
-        {discoveryResult && (
-          <div
-            className={`discovery-feedback-banner banner-${discoveryResult.type}`}
-            role={discoveryResult.type === "error" ? "alert" : "status"}
-          >
-            <div className="feedback-content">
-              <span className="feedback-icon">
-                {discoveryResult.type === "error" ? (
-                  <AlertTriangle size={16} />
-                ) : (
-                  <Sparkles size={16} />
-                )}
-              </span>
-              <div className="feedback-texts">
-                <span className="feedback-text">{discoveryResult.message}</span>
-                {discoveryResult.hint && (
-                  <span className="feedback-hint">{discoveryResult.hint}</span>
-                )}
-              </div>
-            </div>
-
-            {(discoveryResult.retryable || discoveryResult.queries?.length > 0 || discoveryResult.type === "incomplete") && (
-              <div className="feedback-actions">
-                {discoveryResult.retryable && !discovering && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={handlePersonalizedDiscovery}
-                  >
-                    <RefreshCw size={14} />
-                    <span>Try Again</span>
-                  </button>
-                )}
-                {discoveryResult.type === "incomplete" && (
-                  <Link to="/profile" className="btn btn-primary btn-sm">
-                    <span>Complete Profile</span>
-                    <ArrowRight size={14} />
-                  </Link>
-                )}
-                {discoveryResult.queries?.length > 0 && (
-                  <button
-                    type="button"
-                    className="feedback-toggle-btn"
-                    onClick={() => setShowSearchTerms((p) => !p)}
-                  >
-                    <span>{t("jobs.seeHowSearched", "See how we searched")}</span>
-                    {showSearchTerms ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {showSearchTerms && discoveryResult?.queries && (
-          <div className="discovery-queries-drawer">
-            <span className="queries-label">Target search profiles queried:</span>
-            <div className="queries-chips">
-              {discoveryResult.queries.map((q, i) => (
-                <span key={i} className="query-chip">
-                  {q}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
       </header>
 
-      {/* Workspace Controls: Tabs, Search & Compact Filters */}
-      <section className="jobs-workspace-controls">
-        <div className="jobs-controls-top">
-          {/* Tabs */}
-          <div className="tabs-scroll-container">
-            <div className="tabs-pill" role="tablist">
-              <button
-                type="button"
-                className={`tab-pill-item ${activeTab === "recommended" ? "active" : ""}`}
-                onClick={() => setActiveTab("recommended")}
-                role="tab"
-                aria-selected={activeTab === "recommended"}
-              >
-                <span>{t("jobs.recommendedTab", "Recommended for You")}</span>
-                <span className="tab-pill-count">{recommendedJobs.length}</span>
-              </button>
-              <button
-                type="button"
-                className={`tab-pill-item ${activeTab === "all" ? "active" : ""}`}
-                onClick={() => setActiveTab("all")}
-                role="tab"
-                aria-selected={activeTab === "all"}
-              >
-                <span>{t("jobs.allTab", "All Opportunities")}</span>
-                <span className="tab-pill-count">{myJobs.length}</span>
-              </button>
-              <button
-                type="button"
-                className={`tab-pill-item ${activeTab === "discovery" ? "active" : ""}`}
-                onClick={() => setActiveTab("discovery")}
-                role="tab"
-                aria-selected={activeTab === "discovery"}
-              >
-                <span>Discovery</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Search bar */}
-          {activeTab !== "discovery" && (
+      {/* ZONE B: Search Hero */}
+      <section className="jobs-search-hero">
+        <form
+          role="search"
+          className="jobs-search-form"
+          onSubmit={handleSearchSubmit}
+        >
+          <label htmlFor="jobs-search-input" className="sr-only">
+            Search jobs by job title, skill, or company
+          </label>
           <div className="jobs-search-wrap">
-            <Search size={16} className="search-icon" />
+            <Search size={18} className="search-icon" aria-hidden="true" />
             <input
+              id="jobs-search-input"
               type="text"
               className="jobs-search-input"
-              placeholder={t("jobs.searchPlaceholder", "Search by title, skill, or company...")}
+              placeholder={t(
+                "jobs.searchPlaceholder",
+                "Search by job title, skill, or company..."
+              )}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -482,210 +579,1054 @@ export default function JobsPage() {
               <button
                 type="button"
                 className="search-clear-btn"
-                onClick={() => setSearch("")}
+                onClick={handleClearSearch}
                 aria-label="Clear search"
               >
-                <X size={14} />
+                <X size={15} />
               </button>
             )}
           </div>
-          )}
+          <button
+            type="submit"
+            className="btn btn-primary jobs-search-submit-btn"
+            disabled={discoverLoading}
+          >
+            {discoverLoading ? "Searching..." : "Search"}
+          </button>
+        </form>
+
+        {/* Mobile: Full-width Find Jobs for Me button directly under search */}
+        <div className="jobs-find-for-me-mobile">
+          <button
+            className="btn btn-primary btn-block jobs-find-mobile-btn"
+            onClick={handlePersonalizedDiscovery}
+            disabled={discovering}
+            type="button"
+          >
+            {discovering ? (
+              <>
+                <span className="spinner-inline" />
+                <span>Finding matches...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={16} />
+                <span>{t("action.findJobsForMe", "Find Jobs for Me")}</span>
+              </>
+            )}
+          </button>
         </div>
-
-        {/* Compact Filters row */}
-        {activeTab !== "discovery" && (
-        <div className="jobs-filters-row">
-          <div className="filter-group">
-            <select
-              className="filter-select"
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              aria-label="Filter by employment type"
-            >
-              <option value="">{t("jobs.allTypes", "All Types")}</option>
-              {EMPLOYMENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="filter-group">
-            <select
-              className="filter-select"
-              value={levelFilter}
-              onChange={(e) => setLevelFilter(e.target.value)}
-              aria-label="Filter by experience level"
-            >
-              <option value="">{t("jobs.allLevels", "All Levels")}</option>
-              {EXPERIENCE_LEVELS.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {(search || typeFilter || levelFilter) && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setSearch("");
-                setTypeFilter("");
-                setLevelFilter("");
-              }}
-            >
-              <span>Reset filters</span>
-            </button>
-          )}
-        </div>
-        )}
       </section>
 
-      {/* Job Cards Grid / List */}
-      {activeTab === "discovery" ? (
-        <DiscoverPanel />
-      ) : loading ? (
+      {/* Discovery feedback banner (if any) */}
+      {discoveryResult && (
+        <div
+          className={`discovery-feedback-banner banner-${discoveryResult.type}`}
+          role={discoveryResult.type === "error" ? "alert" : "status"}
+        >
+          <div className="feedback-content">
+            <span className="feedback-icon">
+              {discoveryResult.type === "error" ? (
+                <AlertTriangle size={16} />
+              ) : (
+                <Sparkles size={16} />
+              )}
+            </span>
+            <div className="feedback-texts">
+              <span className="feedback-text">{discoveryResult.message}</span>
+              {discoveryResult.hint && (
+                <span className="feedback-hint">{discoveryResult.hint}</span>
+              )}
+            </div>
+          </div>
+
+          {(discoveryResult.retryable ||
+            discoveryResult.queries?.length > 0 ||
+            discoveryResult.type === "incomplete") && (
+            <div className="feedback-actions">
+              {discoveryResult.retryable && !discovering && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={handlePersonalizedDiscovery}
+                >
+                  <RefreshCw size={14} />
+                  <span>Try Again</span>
+                </button>
+              )}
+              {discoveryResult.type === "incomplete" && (
+                <Link to="/profile" className="btn btn-primary btn-sm">
+                  <span>Complete Profile</span>
+                  <ArrowRight size={14} />
+                </Link>
+              )}
+              {discoveryResult.queries?.length > 0 && (
+                <button
+                  type="button"
+                  className="feedback-toggle-btn"
+                  onClick={() => setShowSearchTerms((p) => !p)}
+                >
+                  <span>{t("jobs.seeHowSearched", "See how we searched")}</span>
+                  {showSearchTerms ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showSearchTerms && discoveryResult?.queries && (
+        <div className="discovery-queries-drawer">
+          <span className="queries-label">Target search profiles queried:</span>
+          <div className="queries-chips">
+            {discoveryResult.queries.map((q, i) => (
+              <span key={i} className="query-chip">
+                {q}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Back to recommended navigation when viewing search results */}
+      {view !== "initial" && (
+        <div className="jobs-back-nav">
+          <button
+            type="button"
+            className="jobs-back-link"
+            onClick={handleBackToRecommended}
+          >
+            ← {t("jobs.backToRecommended", "Recommended for you")}
+          </button>
+        </div>
+      )}
+
+      {/* ZONE C: Content Header + Filters */}
+      <div className="jobs-content-header">
+        <div className="jobs-context-col">
+          <h2 className="jobs-context-label">
+            {view === "initial" && (
+              t("jobs.contextRecommended", "Recommended for you")
+            )}
+            {view === "searching" && (
+              <span>{t("jobs.contextSearching", "Searching for")} &ldquo;{submittedQuery || search}&rdquo;...</span>
+            )}
+            {view === "external" && (
+              <span>
+                {t("jobs.contextResults", "Results for")} &ldquo;{submittedQuery}&rdquo;
+                {externalResults.length > 0 && (
+                  <span className="jobs-count-badge"> ({externalResults.length})</span>
+                )}
+              </span>
+            )}
+            {view === "error" && (
+              <span>Search results</span>
+            )}
+          </h2>
+
+          {view === "external" && duplicateCount > 0 && (
+            <span className="jobs-merged-note">
+              ({duplicateCount} duplicate listings merged across sources)
+            </span>
+          )}
+        </div>
+
+        <div className="jobs-header-filter-wrap">
+          <button
+            type="button"
+            className={`btn btn-secondary jobs-filter-trigger ${
+              activeFilterCount > 0 ? "filter-active" : ""
+            }`}
+            onClick={() => setFilterOpen((p) => !p)}
+            aria-expanded={filterOpen}
+            aria-label="Filter jobs"
+          >
+            <SlidersHorizontal size={15} />
+            <span>{t("jobs.filtersButton", "Filters")}</span>
+            {activeFilterCount > 0 && (
+              <span className="jobs-filter-badge">{activeFilterCount}</span>
+            )}
+          </button>
+
+          {/* Desktop Filter Popover */}
+          {filterOpen && (
+            <div
+              className="jobs-filter-panel desktop-only card"
+              ref={filterPanelRef}
+              role="dialog"
+              aria-label="Filter options"
+            >
+              <div className="jobs-filter-panel-header">
+                <span className="filter-panel-title">Filters</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setTypeFilter("");
+                    setLevelFilter("");
+                    resetDiscoverFilters();
+                  }}
+                >
+                  Reset all
+                </button>
+              </div>
+
+              <div className="jobs-filter-panel-body">
+                <div className="jobs-filter-grid">
+                  {/* Location - Spans both columns */}
+                  <div className="form-group col-span-2">
+                    <label className="form-label" htmlFor="fp-location">
+                      Location
+                    </label>
+                    <input
+                      id="fp-location"
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Pune or Remote"
+                      value={discoverFilters.location}
+                      onChange={(e) =>
+                        setDiscoverFilters((f) => ({ ...f, location: e.target.value }))
+                      }
+                    />
+                  </div>
+
+                  {/* Work Mode */}
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="fp-workmode">
+                      Work Mode
+                    </label>
+                    <select
+                      id="fp-workmode"
+                      className="form-select"
+                      value={discoverFilters.remote}
+                      onChange={(e) =>
+                        setDiscoverFilters((f) => ({ ...f, remote: e.target.value }))
+                      }
+                    >
+                      {WORK_MODES.map((m) => (
+                        <option key={m} value={m}>
+                          {m === "" ? "Any Work Mode" : m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Posted Date */}
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="fp-posted">
+                      Posted Date
+                    </label>
+                    <select
+                      id="fp-posted"
+                      className="form-select"
+                      value={discoverFilters.posted}
+                      onChange={(e) =>
+                        setDiscoverFilters((f) => ({ ...f, posted: e.target.value }))
+                      }
+                    >
+                      {POSTED_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Job Type (Internal-only truthful limitation) */}
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="fp-type">
+                      Job Type {view === "external" && <span className="text-muted">(internal)</span>}
+                    </label>
+                    <select
+                      id="fp-type"
+                      className="form-select"
+                      value={typeFilter}
+                      disabled={view === "external"}
+                      onChange={(e) => setTypeFilter(e.target.value)}
+                    >
+                      <option value="">{t("jobs.allTypes", "All Types")}</option>
+                      {EMPLOYMENT_TYPES.map((tVal) => (
+                        <option key={tVal} value={tVal}>
+                          {tVal}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Experience Level (Internal-only truthful limitation) */}
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="fp-level">
+                      Experience Level {view === "external" && <span className="text-muted">(internal)</span>}
+                    </label>
+                    <select
+                      id="fp-level"
+                      className="form-select"
+                      value={levelFilter}
+                      disabled={view === "external"}
+                      onChange={(e) => setLevelFilter(e.target.value)}
+                    >
+                      <option value="">{t("jobs.allLevels", "All Levels")}</option>
+                      {EXPERIENCE_LEVELS.map((lVal) => (
+                        <option key={lVal} value={lVal}>
+                          {lVal}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Collapsible: Advanced Criteria & Sources */}
+                <div className="jobs-filter-accordion">
+                  <button
+                    type="button"
+                    className="jobs-accordion-trigger"
+                    onClick={() => setShowAdvancedFilters((p) => !p)}
+                    aria-expanded={showAdvancedFilters}
+                  >
+                    <span>Advanced criteria & sources</span>
+                    {showAdvancedFilters ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                  </button>
+
+                  {showAdvancedFilters && (
+                    <div className="jobs-filter-advanced-box">
+                      <div className="jobs-filter-grid">
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="fp-smin">
+                            Min Salary (annual)
+                          </label>
+                          <input
+                            id="fp-smin"
+                            type="number"
+                            className="form-input"
+                            placeholder="e.g. 800000"
+                            value={discoverFilters.salary_min}
+                            onChange={(e) =>
+                              setDiscoverFilters((f) => ({ ...f, salary_min: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="fp-smax">
+                            Max Salary (annual)
+                          </label>
+                          <input
+                            id="fp-smax"
+                            type="number"
+                            className="form-input"
+                            placeholder="e.g. 2500000"
+                            value={discoverFilters.salary_max}
+                            onChange={(e) =>
+                              setDiscoverFilters((f) => ({ ...f, salary_max: e.target.value }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      {availableSources.length > 0 && (
+                        <div className="discover-source-select" style={{ marginTop: "var(--space-3)" }}>
+                          <span className="form-label">Job Sources</span>
+                          <div className="source-checkboxes">
+                            {availableSources.map((s) => (
+                              <label key={s} className="source-checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={discoverFilters.sources.includes(s)}
+                                  onChange={() => toggleSource(s)}
+                                />
+                                <span>{s}</span>
+                              </label>
+                            ))}
+                            {discoverFilters.sources.length === 0 && (
+                              <span className="source-hint">All sources selected</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Collapsible: Saved Searches */}
+                <div
+                  className="jobs-filter-accordion"
+                  ref={savedSearchesSectionRef}
+                >
+                  <button
+                    type="button"
+                    className="jobs-accordion-trigger"
+                    onClick={() => setShowSavedSearches((p) => !p)}
+                    aria-expanded={showSavedSearches}
+                  >
+                    <span className="accordion-label-wrap">
+                      <ListChecks size={15} />
+                      <span>Saved Searches</span>
+                      {savedSearches.length > 0 && (
+                        <span className="jobs-count-pill">{savedSearches.length}</span>
+                      )}
+                    </span>
+                    {showSavedSearches ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                  </button>
+
+                  {showSavedSearches && (
+                    <div className="jobs-filter-saved-box">
+                      {showSaveInput ? (
+                        <div className="discover-save-input">
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder="Name this search..."
+                            value={saveName}
+                            onChange={(e) => setSaveName(e.target.value)}
+                            autoFocus
+                          />
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={async () => {
+                              const ok = await handleSaveSearch(search);
+                              if (ok) notify("Search saved. You can re-run it any time.");
+                            }}
+                            disabled={!saveName.trim()}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => {
+                              setShowSaveInput(false);
+                              setSaveName("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm save-trigger-btn"
+                          onClick={() => setShowSaveInput(true)}
+                        >
+                          <Bookmark size={14} />
+                          <span>Save current search criteria</span>
+                        </button>
+                      )}
+
+                      {savedSearches.length > 0 && (
+                        <ul className="discover-saved-list" style={{ marginTop: "var(--space-2)" }}>
+                          {savedSearches.map((s) => (
+                            <li key={s.id} className="discover-saved-item">
+                              <div className="discover-saved-info">
+                                <span className="discover-saved-name">{s.name}</span>
+                                <span className="discover-saved-meta text-muted">
+                                  {s.last_seen_count > 0
+                                    ? `${s.last_seen_count} results`
+                                    : "Saved"}
+                                </span>
+                              </div>
+                              <div className="discover-saved-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={async () => {
+                                    try {
+                                      await handleRunSaved(s.id);
+                                      setView("external");
+                                      setSubmittedQuery(s.name);
+                                      setFilterOpen(false);
+                                      notify(`Loaded results for "${s.name}".`);
+                                    } catch {
+                                      notify("Failed to run saved search.", "error");
+                                    }
+                                  }}
+                                  title="Run now"
+                                >
+                                  <Play size={13} />
+                                  <span>Run</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={async () => {
+                                    await handleDeleteSaved(s.id);
+                                    notify("Saved search deleted.");
+                                  }}
+                                  title="Delete"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="jobs-filter-panel-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block"
+                  onClick={() => {
+                    setFilterOpen(false);
+                    triggerExternalSearch(search);
+                  }}
+                >
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile Bottom Sheet Drawer for Filters */}
+      {filterOpen && (
+        <div className="jobs-filter-drawer-backdrop mobile-only" onClick={() => setFilterOpen(false)}>
+          <div
+            className="jobs-filter-drawer"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Filter jobs"
+          >
+            <div className="drawer-handle" />
+            <div className="jobs-filter-panel-header">
+              <span className="filter-panel-title">Filters</span>
+              <div className="drawer-header-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setTypeFilter("");
+                    setLevelFilter("");
+                    resetDiscoverFilters();
+                  }}
+                >
+                  Reset
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-icon btn-sm drawer-close-btn"
+                  onClick={() => setFilterOpen(false)}
+                  aria-label="Close filters"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="jobs-drawer-body">
+              {/* Location */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="mob-location">Location</label>
+                <input
+                  id="mob-location"
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Pune or Remote"
+                  value={discoverFilters.location}
+                  onChange={(e) =>
+                    setDiscoverFilters((f) => ({ ...f, location: e.target.value }))
+                  }
+                />
+              </div>
+
+              {/* Work Mode & Posted Date */}
+              <div className="jobs-filter-grid">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="mob-workmode">Work Mode</label>
+                  <select
+                    id="mob-workmode"
+                    className="form-select"
+                    value={discoverFilters.remote}
+                    onChange={(e) =>
+                      setDiscoverFilters((f) => ({ ...f, remote: e.target.value }))
+                    }
+                  >
+                    {WORK_MODES.map((m) => (
+                      <option key={m} value={m}>
+                        {m === "" ? "Any Work Mode" : m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="mob-posted">Posted Date</label>
+                  <select
+                    id="mob-posted"
+                    className="form-select"
+                    value={discoverFilters.posted}
+                    onChange={(e) =>
+                      setDiscoverFilters((f) => ({ ...f, posted: e.target.value }))
+                    }
+                  >
+                    {POSTED_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Job Type & Experience Level */}
+              <div className="jobs-filter-grid">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="mob-type">
+                    Job Type {view === "external" && <span className="text-muted">(internal)</span>}
+                  </label>
+                  <select
+                    id="mob-type"
+                    className="form-select"
+                    value={typeFilter}
+                    disabled={view === "external"}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                  >
+                    <option value="">{t("jobs.allTypes", "All Types")}</option>
+                    {EMPLOYMENT_TYPES.map((tVal) => (
+                      <option key={tVal} value={tVal}>
+                        {tVal}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="mob-level">
+                    Experience Level {view === "external" && <span className="text-muted">(internal)</span>}
+                  </label>
+                  <select
+                    id="mob-level"
+                    className="form-select"
+                    value={levelFilter}
+                    disabled={view === "external"}
+                    onChange={(e) => setLevelFilter(e.target.value)}
+                  >
+                    <option value="">{t("jobs.allLevels", "All Levels")}</option>
+                    {EXPERIENCE_LEVELS.map((lVal) => (
+                      <option key={lVal} value={lVal}>
+                        {lVal}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Collapsible Advanced Criteria */}
+              <div className="jobs-filter-accordion">
+                <button
+                  type="button"
+                  className="jobs-accordion-trigger"
+                  onClick={() => setShowAdvancedFilters((p) => !p)}
+                  aria-expanded={showAdvancedFilters}
+                >
+                  <span>Advanced criteria & sources</span>
+                  {showAdvancedFilters ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                </button>
+
+                {showAdvancedFilters && (
+                  <div className="jobs-filter-advanced-box">
+                    <div className="jobs-filter-grid">
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="mob-smin">Min Salary</label>
+                        <input
+                          id="mob-smin"
+                          type="number"
+                          className="form-input"
+                          placeholder="e.g. 800000"
+                          value={discoverFilters.salary_min}
+                          onChange={(e) =>
+                            setDiscoverFilters((f) => ({ ...f, salary_min: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="mob-smax">Max Salary</label>
+                        <input
+                          id="mob-smax"
+                          type="number"
+                          className="form-input"
+                          placeholder="e.g. 2500000"
+                          value={discoverFilters.salary_max}
+                          onChange={(e) =>
+                            setDiscoverFilters((f) => ({ ...f, salary_max: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    {availableSources.length > 0 && (
+                      <div className="discover-source-select" style={{ marginTop: "var(--space-3)" }}>
+                        <span className="form-label">Job Sources</span>
+                        <div className="source-checkboxes">
+                          {availableSources.map((s) => (
+                            <label key={s} className="source-checkbox">
+                              <input
+                                type="checkbox"
+                                checked={discoverFilters.sources.includes(s)}
+                                onChange={() => toggleSource(s)}
+                              />
+                              <span>{s}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Collapsible Saved Searches */}
+              <div className="jobs-filter-accordion">
+                <button
+                  type="button"
+                  className="jobs-accordion-trigger"
+                  onClick={() => setShowSavedSearches((p) => !p)}
+                  aria-expanded={showSavedSearches}
+                >
+                  <span className="accordion-label-wrap">
+                    <ListChecks size={15} />
+                    <span>Saved Searches</span>
+                    {savedSearches.length > 0 && (
+                      <span className="jobs-count-pill">{savedSearches.length}</span>
+                    )}
+                  </span>
+                  {showSavedSearches ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                </button>
+
+                {showSavedSearches && (
+                  <div className="jobs-filter-saved-box">
+                    {showSaveInput ? (
+                      <div className="discover-save-input">
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Name this search..."
+                          value={saveName}
+                          onChange={(e) => setSaveName(e.target.value)}
+                          autoFocus
+                        />
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={async () => {
+                            const ok = await handleSaveSearch(search);
+                            if (ok) notify("Search saved.");
+                          }}
+                          disabled={!saveName.trim()}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => {
+                            setShowSaveInput(false);
+                            setSaveName("");
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm save-trigger-btn"
+                        onClick={() => setShowSaveInput(true)}
+                      >
+                        <Bookmark size={14} />
+                        <span>Save current search criteria</span>
+                      </button>
+                    )}
+
+                    {savedSearches.length > 0 && (
+                      <ul className="discover-saved-list" style={{ marginTop: "var(--space-2)" }}>
+                        {savedSearches.map((s) => (
+                          <li key={s.id} className="discover-saved-item">
+                            <div className="discover-saved-info">
+                              <span className="discover-saved-name">{s.name}</span>
+                            </div>
+                            <div className="discover-saved-actions">
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={async () => {
+                                  try {
+                                    await handleRunSaved(s.id);
+                                    setView("external");
+                                    setSubmittedQuery(s.name);
+                                    setFilterOpen(false);
+                                    notify(`Loaded results for "${s.name}".`);
+                                  } catch {
+                                    notify("Failed to run search.", "error");
+                                  }
+                                }}
+                              >
+                                Run
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={async () => {
+                                  await handleDeleteSaved(s.id);
+                                  notify("Search deleted.");
+                                }}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="jobs-filter-panel-actions">
+              <button
+                type="button"
+                className="btn btn-primary btn-block"
+                onClick={() => {
+                  setFilterOpen(false);
+                  triggerExternalSearch(search);
+                }}
+              >
+                Apply Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ZONE D: Job Results Feed */}
+      {view === "searching" || (view === "initial" && loading) ? (
         <div className="stack" style={{ gap: "var(--space-4)" }}>
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
         </div>
-      ) : filteredJobs.length === 0 ? (
-        <EmptyState
-          icon={Compass}
-          title={t("jobs.noJobsFound", "No opportunities found")}
-          description={
-            search || typeFilter || levelFilter
-              ? "Try adjusting your search criteria or reset filters."
-              : t("jobs.noJobsDesc", "Click 'Find Jobs for Me' to discover personalized matches.")
-          }
-          action={
+      ) : view === "error" || discoverError ? (
+        <div className="discovery-feedback-banner banner-error" role="alert">
+          <div className="feedback-content">
+            <span className="feedback-icon">
+              <AlertTriangle size={16} />
+            </span>
+            <div className="feedback-texts">
+              <span className="feedback-text">
+                {discoverError || "We couldn't complete the search right now."}
+              </span>
+              <span className="feedback-hint">
+                Please check your network connection and try again.
+              </span>
+            </div>
+          </div>
+          <div className="feedback-actions">
             <button
-              className="btn btn-primary"
-              onClick={handlePersonalizedDiscovery}
-              disabled={discovering}
               type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => triggerExternalSearch(submittedQuery || search)}
             >
-              <Compass size={16} />
-              <span>{t("action.findJobsForMe", "Find Jobs for Me")}</span>
+              <RefreshCw size={14} />
+              <span>Retry Search</span>
             </button>
-          }
-        />
+          </div>
+        </div>
+      ) : view === "external" ? (
+        externalResults.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title={`No results for "${submittedQuery}"`}
+            description="Try a different keyword, broaden your location, or adjust filters."
+            action={
+              <div className="empty-state-actions">
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleClearSearch}
+                  type="button"
+                >
+                  Clear search
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setFilterOpen(true)}
+                  type="button"
+                >
+                  Adjust Filters
+                </button>
+              </div>
+            }
+          />
+        ) : (
+          <div className="jobs-list-stack">
+            {externalResults.map((job) => (
+              <DiscoverCard key={job.canonical_key} job={job} />
+            ))}
+          </div>
+        )
       ) : (
-        <div className="jobs-list-stack">
-          {filteredJobs.map((job) => {
-            const isSaved = savedJobIds.has(job.id);
-            const score = job.match_score || 0;
-            const skills = Array.isArray(job.required_skills) ? job.required_skills : [];
+        /* INITIAL VIEW: Internal / Recommended Jobs Feed */
+        filteredInternalJobs.length === 0 ? (
+          <EmptyState
+            icon={Compass}
+            title={
+              search || typeFilter || levelFilter
+                ? "No jobs match your current filters"
+                : "Your personalized matches will appear here"
+            }
+            description={
+              search || typeFilter || levelFilter
+                ? "Try adjusting your search criteria or resetting filters."
+                : "Find jobs based on your skills and career profile."
+            }
+            action={
+              search || typeFilter || levelFilter ? (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setSearch("");
+                    setTypeFilter("");
+                    setLevelFilter("");
+                  }}
+                  type="button"
+                >
+                  Clear Filters
+                </button>
+              ) : (
+                <div className="empty-state-actions">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handlePersonalizedDiscovery}
+                    disabled={discovering}
+                    type="button"
+                  >
+                    <Compass size={16} />
+                    <span>{t("action.findJobsForMe", "Find Jobs for Me")}</span>
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      const input = document.getElementById("jobs-search-input");
+                      input?.focus();
+                    }}
+                    type="button"
+                  >
+                    <span>{t("jobs.searchNudge", "Search for a role →")}</span>
+                  </button>
+                </div>
+              )
+            }
+          />
+        ) : (
+          <div className="jobs-list-stack">
+            {filteredInternalJobs.map((job) => {
+              const isSaved = savedJobIds.has(job.id);
+              const score = job.match_score || 0;
+              const skills = Array.isArray(job.required_skills) ? job.required_skills : [];
 
-            return (
-              <div key={job.id} className="card job-card-primary">
-                <div className="job-card-main-content">
-                  <div className="job-card-header">
-                    <div className="job-card-title-wrap">
-                      <h2 className="job-card-title">
-                        <Link to={`/discover/${job.id}`}>{job.title}</Link>
-                      </h2>
-                      <div className="job-card-meta-line">
-                        <span className="company-name">{job.company}</span>
-                        {job.location && (
-                          <>
-                            <span className="meta-sep">•</span>
-                            <span className="location-name">{job.location}</span>
-                          </>
-                        )}
-                        {job.employment_type && (
-                          <>
-                            <span className="meta-sep">•</span>
-                            <span>{job.employment_type}</span>
-                          </>
-                        )}
-                        {job.experience_level && (
-                          <>
-                            <span className="meta-sep">•</span>
-                            <span>{job.experience_level}</span>
-                          </>
+              return (
+                <div key={job.id} className="card job-card-primary">
+                  <div className="job-card-main-content">
+                    <div className="job-card-header">
+                      <div className="job-card-title-wrap">
+                        <h2 className="job-card-title">
+                          <Link to={`/discover/${job.id}`}>{job.title}</Link>
+                        </h2>
+                        <div className="job-card-meta-line">
+                          <span className="company-name">{job.company}</span>
+                          {job.location && (
+                            <>
+                              <span className="meta-sep">•</span>
+                              <span className="location-name">{job.location}</span>
+                            </>
+                          )}
+                          {job.employment_type && (
+                            <>
+                              <span className="meta-sep">•</span>
+                              <span>{job.employment_type}</span>
+                            </>
+                          )}
+                          {job.experience_level && (
+                            <>
+                              <span className="meta-sep">•</span>
+                              <span>{job.experience_level}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {score > 0 && (
+                        <div className="job-card-score-col">
+                          <ScoreBadge score={score} />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Skills tags */}
+                    {skills.length > 0 && (
+                      <div className="job-card-skills-row">
+                        {skills.slice(0, 5).map((sk) => (
+                          <span key={sk} className="skill-chip match">
+                            {sk}
+                          </span>
+                        ))}
+                        {skills.length > 5 && (
+                          <span className="skill-chip-more">+{skills.length - 5} more</span>
                         )}
                       </div>
-                    </div>
+                    )}
 
-                    <div className="job-card-score-col">
-                      <ScoreBadge score={score} />
-                    </div>
-                  </div>
-
-                  {/* Skills tags */}
-                  {skills.length > 0 && (
-                    <div className="job-card-skills-row">
-                      {skills.slice(0, 5).map((sk) => (
-                        <span key={sk} className="skill-chip match">
-                          {sk}
+                    {/* Match indicator only when backed by genuine data */}
+                    {score >= 70 && (
+                      <div className="job-card-fit-summary">
+                        <span className="fit-point positive">
+                          <CheckCircle2 size={14} className="text-success" />
+                          <span>High skill & role alignment with your profile</span>
                         </span>
-                      ))}
-                      {skills.length > 5 && (
-                        <span className="skill-chip-more">+{skills.length - 5} more</span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Clean match indicators */}
-                  <div className="job-card-fit-summary">
-                    {score >= 70 ? (
-                      <span className="fit-point positive">
-                        <CheckCircle2 size={14} className="text-success" />
-                        <span>High skill & role alignment with your profile</span>
-                      </span>
-                    ) : (
-                      <span className="fit-point neutral">
-                        <AlertTriangle size={14} className="text-warning" />
-                        <span>Some skills may need strengthening</span>
-                      </span>
+                      </div>
                     )}
                   </div>
-                </div>
 
-                <div className="job-card-action-bar">
-                  <span className="posted-date text-xs text-muted">
-                    {job.created_at ? new Date(job.created_at).toLocaleDateString() : "Recently active"}
-                  </span>
+                  <div className="job-card-action-bar">
+                    <span className="posted-date text-xs text-muted">
+                      {job.created_at ? new Date(job.created_at).toLocaleDateString() : "Recently active"}
+                    </span>
 
-                  <div className="job-card-buttons">
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${isSaved ? "btn-secondary" : "btn-ghost"}`}
-                      onClick={() => handleToggleSave(job)}
-                      title={isSaved ? "Saved in applications" : "Save to applications"}
-                      aria-label={isSaved ? "Saved" : "Save"}
-                    >
-                      {isSaved ? (
-                        <>
-                          <BookmarkCheck size={16} className="text-accent" />
-                          <span>Saved</span>
-                        </>
-                      ) : (
-                        <>
-                          <Bookmark size={16} />
-                          <span>Save</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="job-card-buttons">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${isSaved ? "btn-secondary" : "btn-ghost"}`}
+                        onClick={() => handleToggleSave(job)}
+                        title={isSaved ? "Saved in applications" : "Save to applications"}
+                        aria-label={isSaved ? "Saved" : "Save"}
+                      >
+                        {isSaved ? (
+                          <>
+                            <BookmarkCheck size={16} className="text-accent" />
+                            <span>Saved</span>
+                          </>
+                        ) : (
+                          <>
+                            <Bookmark size={16} />
+                            <span>Save</span>
+                          </>
+                        )}
+                      </button>
 
-                    <Link to={`/discover/${job.id}`} className="btn btn-primary btn-sm">
-                      <span>{t("action.viewOpportunity", "View Opportunity")}</span>
-                      <ArrowRight size={14} />
-                    </Link>
+                      <Link to={`/discover/${job.id}`} className="btn btn-primary btn-sm">
+                        <span>{t("jobs.viewDetails", "View Details")}</span>
+                        <ArrowRight size={14} />
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )
       )}
 
-      {/* Add Target Role Modal */}
+      {/* Add Target Role Modal (Zone E - Secondary modal, unchanged API) */}
       {showAddModal && (
         <Modal
           isOpen={showAddModal}
@@ -748,9 +1689,9 @@ export default function JobsPage() {
                   value={form.employment_type}
                   onChange={(e) => setForm({ ...form, employment_type: e.target.value })}
                 >
-                  {EMPLOYMENT_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
+                  {EMPLOYMENT_TYPES.map((tVal) => (
+                    <option key={tVal} value={tVal}>
+                      {tVal}
                     </option>
                   ))}
                 </select>
