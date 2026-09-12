@@ -295,11 +295,6 @@ export default function SignUpPage() {
           Sign in
         </Link>
       </div>
-
-      <div className="auth-micro-trust">
-        <ShieldCheck size={13} className="text-accent flex-shrink-0" />
-        <span>100% Fact-preserving AI • Zero fabricated credentials</span>
-      </div>
     </div>
   );
 }

@@ -213,13 +213,8 @@ export default function LoginPage() {
       <div className="auth-switch-box">
         <span>Don't have an account?</span>{" "}
         <Link to="/signup" className="auth-switch-link">
-          Create one free
+          Create an account
         </Link>
-      </div>
-
-      <div className="auth-micro-trust">
-        <ShieldCheck size={13} className="text-accent flex-shrink-0" />
-        <span>Private personal workspace • Confidential records</span>
       </div>
     </div>
   );

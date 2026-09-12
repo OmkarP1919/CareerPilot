@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { LanguageProvider } from "./context/LanguageContext";
@@ -20,6 +20,15 @@ import ApplicationsPage from "./pages/ApplicationsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
 
+function RedirectWithParam({ to }) {
+  const params = useParams();
+  let target = to;
+  for (const [key, value] of Object.entries(params)) {
+    target = target.replace(`:${key}`, value);
+  }
+  return <Navigate to={target} replace />;
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -28,13 +37,24 @@ export default function App() {
           <ToastProvider>
             <BrowserRouter>
               <Routes>
+                {/* Public / Marketing */}
                 <Route path="/" element={<LandingPage />} />
 
+                {/* Authentication Routes with Shared Split Shell */}
                 <Route element={<AuthLayout />}>
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/signup" element={<SignUpPage />} />
                   <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 </Route>
+
+                {/* Route Aliases (Canonical redirects) */}
+                <Route path="/dashboard" element={<Navigate to="/home" replace />} />
+                <Route path="/jobs" element={<Navigate to="/discover" replace />} />
+                <Route path="/jobs/:id" element={<RedirectWithParam to="/discover/:id" />} />
+                <Route path="/jobs/:id/match" element={<RedirectWithParam to="/discover/:id/match" />} />
+                <Route path="/resume" element={<Navigate to="/resumes" replace />} />
+                <Route path="/applications" element={<Navigate to="/pipeline" replace />} />
+                <Route path="/analytics" element={<Navigate to="/insights" replace />} />
 
                 <Route element={<ProtectedRoute />}>
                   <Route element={<MainLayout />}>
@@ -48,15 +68,6 @@ export default function App() {
                     <Route path="/insights" element={<AnalyticsPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
-
-                    {/* Route Aliases */}
-                    <Route path="/dashboard" element={<Navigate to="/home" replace />} />
-                    <Route path="/jobs" element={<Navigate to="/discover" replace />} />
-                    <Route path="/jobs/:id" element={<Navigate to="/discover/:id" replace />} />
-                    <Route path="/jobs/:id/match" element={<Navigate to="/discover/:id/match" replace />} />
-                    <Route path="/resume" element={<Navigate to="/resumes" replace />} />
-                    <Route path="/applications" element={<Navigate to="/pipeline" replace />} />
-                    <Route path="/analytics" element={<Navigate to="/insights" replace />} />
                   </Route>
                 </Route>
 

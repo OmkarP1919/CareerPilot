@@ -138,6 +138,25 @@ class _JobsAPIHarness:
         db.commit()
         db.close()
 
+    def seed_external_job(self, job_id, user_id=USER_A["id"], source="Adzuna", external_id="ext-123"):
+        db = self.Session()
+        job = Job(
+            id=job_id,
+            user_id=user_id,
+            title="External Job",
+            company="Acme",
+            location="Remote",
+            employment_type="Full-time",
+            experience_level="Mid Level",
+            description="External job description",
+            required_skills="Python, FastAPI",
+            source=source,
+            external_id=external_id,
+        )
+        db.add(job)
+        db.commit()
+        db.close()
+
 
 class JobListIDORTests(unittest.TestCase):
     def setUp(self):
@@ -233,6 +252,29 @@ class JobGetIDORTests(unittest.TestCase):
             },
         )
         self.assertEqual(resp.status_code, 404)
+
+    def test_matched_user_can_retrieve_recommended_job(self):
+        self.h.seed_job("job_a", user_id=USER_A["id"])
+        self.h.seed_job_match("match_b", "job_a", user_id=USER_B["id"])
+        self.h.current_user_id = USER_B["id"]
+        resp = self.h.client.get("/jobs/job_a")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["id"], "job_a")
+
+    def test_applied_user_can_retrieve_job(self):
+        self.h.seed_job("job_a", user_id=USER_A["id"])
+        self.h.seed_application("app_b", "job_a", user_id=USER_B["id"])
+        self.h.current_user_id = USER_B["id"]
+        resp = self.h.client.get("/jobs/job_a")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["id"], "job_a")
+
+    def test_external_catalog_job_can_be_retrieved_by_any_user(self):
+        self.h.seed_external_job("job_ext", user_id=USER_A["id"], source="Adzuna", external_id="adz-99")
+        self.h.current_user_id = USER_B["id"]
+        resp = self.h.client.get("/jobs/job_ext")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["id"], "job_ext")
 
 
 class JobDeleteIntegrityTests(unittest.TestCase):

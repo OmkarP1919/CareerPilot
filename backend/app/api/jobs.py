@@ -22,6 +22,7 @@ from app.schemas.job import (
 )
 from app.services.job_discovery import discover_jobs, get_recommended_jobs
 from app.services.personalized_discovery import PersonalizedDiscoveryService
+from app.api.job_access import get_own_job
 
 logger = logging.getLogger(__name__)
 
@@ -132,10 +133,7 @@ def get_job(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    job = db.query(Job).filter(Job.id == job_id, Job.user_id == user.id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return get_own_job(job_id, user, db)
 
 
 

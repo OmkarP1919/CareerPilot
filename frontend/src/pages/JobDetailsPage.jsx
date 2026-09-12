@@ -56,6 +56,11 @@ export default function JobDetailsPage() {
 
   // Load Job details and match analysis
   const loadJob = useCallback(async () => {
+    if (!id || id === ":id") {
+      setError("Opportunity details could not be found.");
+      setLoading(false);
+      return;
+    }
     try {
       const [jobData, matchRes, appsRes] = await Promise.all([
         api.get(`/jobs/${id}`),
