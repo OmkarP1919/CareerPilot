@@ -4,6 +4,7 @@ import { api } from "../services/api";
 import { SkeletonCard } from "../components/Skeleton";
 import ProfileRecordModal from "../components/profile/ProfileRecordModal";
 import ProfileResumeSyncModal from "../components/profile/ProfileResumeSyncModal";
+import SkillAutocomplete from "../components/profile/SkillAutocomplete";
 import {
   buildResumeProfileDiff,
   applyResumeProfileSync,
@@ -24,12 +25,14 @@ import {
   FolderGit2,
   Calendar,
   RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 
 export default function ProfilePage() {
   const { currentUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [savingGoals, setSavingGoals] = useState(false);
   const [notification, setNotification] = useState(null);
 
@@ -47,7 +50,6 @@ export default function ProfilePage() {
   });
 
   // Skills quick-add input
-  const [newSkillText, setNewSkillText] = useState("");
   const [addingSkill, setAddingSkill] = useState(false);
 
   // Generic record modal state (experience, project, education, certification)
@@ -64,9 +66,11 @@ export default function ProfilePage() {
 
   // Fetch full profile and resume data
   const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const [profileData, resumeList] = await Promise.all([
-        api.get("/profile").catch(() => null),
+        api.get("/profile"),
         api.get("/resumes").catch(() => []),
       ]);
 
@@ -80,28 +84,23 @@ export default function ProfilePage() {
       }
 
       const safeResumes = Array.isArray(resumeList) ? resumeList : [];
-      setResumes(safeResumes);
 
       // Check if user has a master or parsed resume
       const masterResume = safeResumes.find((r) => r.is_master) || safeResumes[0];
       if (masterResume?.id) {
-        try {
-          const parsedRes = await api.get(`/resumes/${masterResume.id}/parsed`);
-          if (parsedRes?.data && Object.keys(parsedRes.data).length > 0) {
-            setParsedResumeData({
-              id: masterResume.id,
-              name: masterResume.original_filename || "Master Resume",
-              data: parsedRes.data,
-            });
-            const diff = buildResumeProfileDiff(parsedRes.data, profileData);
-            setSyncDiff(diff);
-          }
-        } catch {
-          // Gracefully continue if parsed resume is not yet available
+        const parsedRes = await api.get(`/resumes/${masterResume.id}/parsed`).catch(() => null);
+        if (parsedRes?.data && Object.keys(parsedRes.data).length > 0) {
+          setParsedResumeData({
+            id: masterResume.id,
+            name: masterResume.original_filename || "Master Resume",
+            data: parsedRes.data,
+          });
+          const diff = buildResumeProfileDiff(parsedRes.data, profileData);
+          setSyncDiff(diff);
         }
       }
-    } catch {
-      notify("Failed to load profile data", "error");
+    } catch (err) {
+      setError(err?.message || "Failed to load profile data");
     } finally {
       setLoading(false);
     }
@@ -128,9 +127,8 @@ export default function ProfilePage() {
   };
 
   // Quick-add Skill
-  const handleAddSkill = async (e) => {
-    if (e) e.preventDefault();
-    const skillName = newSkillText.trim();
+  const handleAddSkill = async (skillNameStr) => {
+    const skillName = skillNameStr.trim();
     if (!skillName) return;
 
     // Client deduplication
@@ -149,7 +147,6 @@ export default function ProfilePage() {
         category: "Other Technical Skills",
       });
       setProfile((prev) => ({ ...prev, skills: [...(prev.skills || []), created] }));
-      setNewSkillText("");
       notify(`Added ${skillName}`);
     } catch (err) {
       notify(err.message || "Failed to add skill", "error");
@@ -323,6 +320,21 @@ export default function ProfilePage() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="page profile-page-unified">
+        <div className="empty-state" style={{ padding: "4rem 2rem", textAlign: "center" }}>
+          <AlertCircle size={48} className="text-danger" style={{ marginBottom: "var(--space-4)", margin: "0 auto var(--space-4)" }} />
+          <h3>Failed to load profile</h3>
+          <p className="text-secondary">{error}</p>
+          <button className="btn btn-primary" style={{ marginTop: "var(--space-4)" }} onClick={fetchData}>
+            <RefreshCw size={14} /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const displayName = currentUser?.displayName || currentUser?.email?.split("@")[0] || "Career Profile";
   const userLocation = profile?.profile?.location;
   const targetRoles = profile?.profile?.preferred_roles;
@@ -481,25 +493,14 @@ export default function ProfilePage() {
         </div>
 
         <div className="card-body">
-          {/* Fast Quick-Add Field (No modal required) */}
-          <form onSubmit={handleAddSkill} className="profile-quick-skill-form">
-            <input
-              type="text"
-              className="form-input profile-quick-skill-input"
-              value={newSkillText}
-              onChange={(e) => setNewSkillText(e.target.value)}
-              placeholder="Type a skill and press Enter (e.g. React, Python, PostgreSQL)..."
+          {/* Fast Quick-Add Field with Autocomplete */}
+          <div className="profile-quick-skill-wrapper">
+            <SkillAutocomplete
+              onAddSkill={handleAddSkill}
               disabled={addingSkill}
+              profileSkills={profile?.skills || []}
             />
-            <button
-              type="submit"
-              className="btn btn-primary btn-sm profile-quick-skill-btn"
-              disabled={addingSkill || !newSkillText.trim()}
-            >
-              <Plus size={16} aria-hidden="true" />
-              <span>Add</span>
-            </button>
-          </form>
+          </div>
 
           {/* Interactive Tag Cloud */}
           <div className="profile-skills-cloud" style={{ marginTop: "var(--space-4)" }}>

@@ -95,14 +95,10 @@ export function useJobSearch() {
 
   const handleRunSaved = useCallback(
     async (id) => {
-      try {
-        const res = await api.runSavedSearch(id);
-        setSearchReport(res.report);
-        await loadSavedSearches();
-        return res;
-      } catch (err) {
-        throw err;
-      }
+      const res = await api.runSavedSearch(id);
+      setSearchReport(res.report);
+      await loadSavedSearches();
+      return res;
     },
     [loadSavedSearches]
   );

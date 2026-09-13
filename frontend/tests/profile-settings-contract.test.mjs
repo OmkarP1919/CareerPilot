@@ -80,8 +80,8 @@ assert.ok(
   "ProfilePage must provide inline handleAddSkill without forced modal"
 );
 assert.ok(
-  profileSrc.includes("newSkillText"),
-  "ProfilePage must have newSkillText state for rapid skill entry"
+  profileSrc.includes("SkillAutocomplete"),
+  "ProfilePage must integrate SkillAutocomplete for smart skill entry"
 );
 
 // Reusable modal integration
@@ -96,6 +96,87 @@ assert.ok(
 console.log("  ok   2. Profile Page integrity, absence of fake scores, and real actions verified");
 
 // -----------------------------------------------------------------------------
+// 2.5 Skill Suggestions Dataset Integrity
+// -----------------------------------------------------------------------------
+const skillSuggestionsPath = path.join(
+  ROOT,
+  "src",
+  "components",
+  "profile",
+  "skillSuggestions.js"
+);
+assert.ok(fs.existsSync(skillSuggestionsPath), "skillSuggestions.js must exist");
+
+const { SKILL_SUGGESTIONS, SKILL_CATEGORIES } = await import(
+  `file://${skillSuggestionsPath}`
+);
+
+assert.ok(Array.isArray(SKILL_SUGGESTIONS), "SKILL_SUGGESTIONS must be an array");
+assert.ok(SKILL_SUGGESTIONS.length > 30, "SKILL_SUGGESTIONS must contain a reasonable dataset");
+const hasPython = SKILL_SUGGESTIONS.some(s => s.name === "Python" && s.category === SKILL_CATEGORIES.PROGRAMMING);
+assert.ok(hasPython, "SKILL_SUGGESTIONS must contain categorized Python");
+
+console.log("  ok   2.5. Skill suggestions dataset verified");
+
+// -----------------------------------------------------------------------------
+// 2.6 SkillAutocomplete Token Contract & Accessibility
+// -----------------------------------------------------------------------------
+const skillAutocompletePath = path.join(
+  ROOT,
+  "src",
+  "components",
+  "profile",
+  "SkillAutocomplete.jsx"
+);
+assert.ok(fs.existsSync(skillAutocompletePath), "SkillAutocomplete.jsx must exist");
+const skillAutocompleteSrc = fs.readFileSync(skillAutocompletePath, "utf8");
+
+// Must NOT use undefined CSS custom properties
+const forbiddenTokens = [
+  "--color-surface",
+  "--color-surface-hover",
+  "--color-border",
+  "--color-text",
+  "--color-secondary",
+];
+for (const token of forbiddenTokens) {
+  assert.ok(
+    !skillAutocompleteSrc.includes(token),
+    `SkillAutocomplete must not reference undefined token '${token}'`
+  );
+}
+
+// MUST use existing application tokens
+const requiredTokens = [
+  "--bg-surface",
+  "--bg-surface-hover",
+  "--text-primary",
+  "--text-secondary",
+  "--border",
+  "--accent",
+];
+for (const token of requiredTokens) {
+  assert.ok(
+    skillAutocompleteSrc.includes(token),
+    `SkillAutocomplete must reference application token '${token}'`
+  );
+}
+
+// Accessibility: combobox input must have an accessible label
+assert.ok(
+  skillAutocompleteSrc.includes('aria-label="Add a skill"'),
+  "SkillAutocomplete input must have aria-label='Add a skill'"
+);
+
+// No duplicate marginTop in dropdown styles
+assert.ok(
+  !skillAutocompleteSrc.includes('marginTop: "4px"'),
+  "SkillAutocomplete dropdown must not have duplicate marginTop property"
+);
+
+console.log("  ok   2.6. SkillAutocomplete CSS token contract and accessibility verified");
+
+// -----------------------------------------------------------------------------
 // 3. Resume Sync & Deduplication Logic in profileAutofillUtils.js
 // -----------------------------------------------------------------------------
 const autofillUtilsPath = path.join(
@@ -107,7 +188,7 @@ const autofillUtilsPath = path.join(
 );
 assert.ok(fs.existsSync(autofillUtilsPath), "profileAutofillUtils.js must exist");
 
-const { buildResumeProfileDiff, applyResumeProfileSync } = await import(
+const { buildResumeProfileDiff } = await import(
   `file://${autofillUtilsPath}`
 );
 
