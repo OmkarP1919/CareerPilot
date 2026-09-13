@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "test": "node tests/resume-contract.mjs && node tests/api-deploy-contract.mjs && node tests/job-route-contract.test.mjs && node tests/unified-jobs-contract.test.mjs && node tests/application-pipeline-contract.test.mjs",
+    "test": "node tests/resume-contract.mjs && node tests/api-deploy-contract.mjs && node tests/job-route-contract.test.mjs && node tests/unified-jobs-contract.test.mjs && node tests/application-pipeline-contract.test.mjs && node tests/home-dashboard-contract.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
