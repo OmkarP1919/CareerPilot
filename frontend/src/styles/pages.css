@@ -2350,11 +2350,36 @@
   color: var(--text-primary);
 }
 
+.job-details-page {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  position: relative;
+}
+
+@media (max-width: 767px) {
+  .job-details-page {
+    padding-bottom: calc(var(--mobile-nav-height, 64px) + 76px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .job-details-page .job-action-bar {
+    display: none;
+  }
+}
+
+/* ================================================
+   1. JOB HERO HEADER
+   ================================================ */
 .job-details-hero {
   padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
 .hero-main-row {
@@ -2365,41 +2390,138 @@
   flex-wrap: wrap;
 }
 
+.hero-info-col {
+  flex: 1;
+  min-width: 280px;
+}
+
+.hero-company-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+.hero-company-name {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.hero-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .job-hero-title {
-  font-size: var(--text-3xl);
+  font-size: 1.625rem;
   font-weight: var(--weight-bold);
   color: var(--text-primary);
+  line-height: var(--leading-tight);
   letter-spacing: var(--tracking-tight);
+  margin-top: var(--space-1);
+}
+
+@media (max-width: 640px) {
+  .job-hero-title {
+    font-size: 1.25rem;
+  }
 }
 
 .job-hero-meta {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-md);
-  color: var(--text-secondary);
-  margin-top: 4px;
+  margin-top: var(--space-3);
   flex-wrap: wrap;
 }
 
-.hero-actions-bar {
+.job-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.job-meta-pill.work-mode {
+  background: var(--accent-light, rgba(99, 102, 241, 0.1));
+  color: var(--accent);
+  border-color: rgba(99, 102, 241, 0.25);
+  font-weight: var(--weight-medium);
+}
+
+.job-meta-pill.salary {
+  color: var(--color-success, #16a34a);
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.hero-score-col {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.hero-score-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-surface-elevated, var(--bg-surface));
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.hero-score-tier {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+/* ================================================
+   2. JOB ACTION BAR (Desktop)
+   ================================================ */
+.job-action-bar {
+  padding: var(--space-4) var(--space-6);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.job-action-bar-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  border-top: 1px solid var(--border-subtle);
-  padding-top: var(--space-4);
   flex-wrap: wrap;
 }
 
-.hero-primary-actions {
+.action-bar-primary-group {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
 }
 
-.hero-status-wrap {
+.action-bar-primary-cta {
+  font-weight: var(--weight-semibold);
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.28);
+}
+
+.action-bar-external-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.action-bar-status-group {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -2419,96 +2541,257 @@
   border: 1px solid var(--border);
   background: var(--bg-surface);
   color: var(--text-primary);
+  cursor: pointer;
 }
 
-.job-details-tabs {
+/* ================================================
+   3. MOBILE SEGMENTED NAV (< 768px only)
+   ================================================ */
+.job-details-mobile-nav {
+  display: none;
+  width: 100%;
+}
+
+@media (max-width: 767px) {
+  .job-details-mobile-nav {
+    display: flex;
+  }
+}
+
+.mobile-nav-pill-group {
+  display: flex;
+  gap: var(--space-2);
+  background: var(--bg-surface);
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  width: 100%;
+}
+
+.mobile-nav-pill {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  border-bottom: 1px solid var(--border);
-}
-
-.details-tab {
-  padding: 10px 16px;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   color: var(--text-secondary);
-  border-bottom: 2px solid transparent;
-  background: none;
-  border-top: none;
-  border-left: none;
-  border-right: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  min-height: 44px;
   transition: all var(--duration-fast) var(--ease-default);
 }
 
-.details-tab:hover {
-  color: var(--text-primary);
-}
-
-.details-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+.mobile-nav-pill.active {
+  background: var(--accent);
+  color: #ffffff;
   font-weight: var(--weight-semibold);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
+/* ================================================
+   4. CONTENT GRID (Desktop 65/35, Tablet 2-Col, Mobile Single Col)
+   ================================================ */
+.job-details-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(320px, 1.15fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+/* Tablet layout (768px – 1023px): Keep both columns visible with tailored tablet proportions */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .job-details-content-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(290px, 1fr);
+    gap: var(--space-4);
+  }
+
+  .fit-panel-card {
+    padding: var(--space-4);
+  }
+
+  .job-overview-card {
+    padding: var(--space-5);
+  }
+}
+
+/* Mobile Phone layout (< 768px): Single column with segmented navigation */
+@media (max-width: 767px) {
+  .job-details-content-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  .mobile-hidden {
+    display: none !important;
+  }
+}
+
+/* Overview Panel & Description */
 .job-overview-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-5);
+}
+
+.job-overview-card {
+  padding: var(--space-6);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.panel-section-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.formatted-description {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
 }
 
 .formatted-description p {
   margin-bottom: var(--space-3);
-  color: var(--text-secondary);
-  line-height: var(--leading-relaxed);
 }
 
-.fit-analysis-stack {
+.description-list-item {
+  margin-left: var(--space-4);
+  margin-bottom: var(--space-2);
+  list-style-type: disc;
+}
+
+.empty-description-prompt {
+  padding: var(--space-4);
+  background: var(--bg-surface-elevated, var(--bg-surface));
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+}
+
+.job-details-page .skills-chips-wrap,
+.tailored-drawer-panel .skills-chips-wrap,
+.analyze-resume-modal-body .skills-chips-wrap {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
-/* Fit Hero Card & Factor Bars */
-.fit-hero-card {
+.job-details-page .skill-chip,
+.tailored-drawer-panel .skill-chip,
+.analyze-resume-modal-body .skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.job-details-page .skill-chip.match,
+.tailored-drawer-panel .skill-chip.match,
+.analyze-resume-modal-body .skill-chip.match {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--color-success, #16a34a);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.job-details-page .skill-chip.missing,
+.tailored-drawer-panel .skill-chip.missing,
+.analyze-resume-modal-body .skill-chip.missing {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--color-warning, #d97706);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+/* ================================================
+   5. FIT ANALYSIS SIDEBAR (35%)
+   ================================================ */
+.job-fit-sidebar {
+  position: sticky;
+  top: calc(var(--topnav-height, 60px) + var(--space-4));
+}
+
+@media (max-width: 767px) {
+  .job-fit-sidebar {
+    position: static;
+  }
+}
+
+.fit-panel-card {
   padding: var(--space-6);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-5);
+  box-shadow: var(--shadow-sm);
 }
 
-.fit-hero-content {
+.fit-panel-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
+  gap: var(--space-3);
 }
 
 .fit-score-display {
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
-  margin-top: 4px;
+  gap: var(--space-2);
+  margin-top: 2px;
 }
 
 .fit-score-number {
-  font-size: 3rem;
+  font-size: 2.25rem;
   font-weight: var(--weight-bold);
   color: var(--accent);
   line-height: 1;
 }
 
 .fit-score-badge {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: var(--weight-bold);
-  color: var(--success);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface-elevated, var(--bg-surface));
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
 }
 
-.fit-hero-desc {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  margin-top: var(--space-2);
+.fit-score-badge.high {
+  color: var(--color-success, #16a34a);
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.fit-recalc-btn {
+  font-size: var(--text-xs);
+  padding: 4px 8px;
+}
+
+.fit-subheading {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide, 0.05em);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--space-2);
 }
 
 .fit-factors-bars {
@@ -2517,36 +2800,231 @@
   gap: var(--space-3);
 }
 
-.factor-bar-item {
+.job-details-page .factor-bar-item,
+.analyze-resume-modal-body .factor-bar-item {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.factor-bar-header {
+.job-details-page .factor-bar-header,
+.analyze-resume-modal-body .factor-bar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
-.match-factor-label-wrap {
+.job-details-page .match-factor-label-wrap,
+.analyze-resume-modal-body .match-factor-label-wrap {
   display: flex;
   align-items: center;
 }
 
-.match-reasons-card {
-  padding: var(--space-5);
+.job-details-page .factor-name,
+.analyze-resume-modal-body .factor-name {
+  font-weight: var(--weight-medium);
 }
 
-.match-reasons-card.success .card-header h3 {
-  color: var(--success);
+.job-details-page .factor-val,
+.analyze-resume-modal-body .factor-val {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
 }
 
-.match-reasons-card.warning .card-header h3 {
-  color: var(--warning);
+.job-details-page .score-bar-track,
+.analyze-resume-modal-body .score-bar-track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--border-subtle, rgba(0, 0, 0, 0.06));
+  overflow: hidden;
 }
+
+.job-details-page .score-bar-fill,
+.analyze-resume-modal-body .score-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--duration-normal) var(--ease-default);
+}
+
+.fit-copilot-cta-box {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.copilot-cta-text {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.fit-aligned-history-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.aligned-evidence-item {
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-elevated, var(--bg-surface));
+  border: 1px solid var(--border-subtle);
+}
+
+.evidence-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.evidence-text {
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.fit-explainer-accordion {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-3);
+}
+
+.fit-explainer-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--duration-fast);
+}
+
+.fit-explainer-toggle:hover {
+  color: var(--text-primary);
+}
+
+.fit-explainer-content {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-elevated, var(--bg-surface));
+  border: 1px solid var(--border-subtle);
+}
+
+.explainer-list {
+  margin-top: var(--space-2);
+  padding-left: var(--space-4);
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ================================================
+   6. MOBILE STICKY ACTIONS BAR (< 768px)
+   ================================================ */
+.job-details-sticky-actions {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .job-details-sticky-actions {
+    display: flex;
+    position: fixed;
+    bottom: calc(var(--mobile-nav-height, 64px) + env(safe-area-inset-bottom, 0px));
+    left: 0;
+    right: 0;
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+    z-index: 99;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .job-sticky-primary-btn {
+    flex: 1;
+    min-height: 44px;
+    font-weight: var(--weight-semibold);
+  }
+
+  .status-quick-toggle {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ================================================
+   7. IN-CONTEXT TAILORED RESUME DRAWER
+   ================================================ */
+.tailored-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  animation: fadeIn var(--duration-fast, 150ms) var(--ease-default, ease);
+}
+
+.tailored-drawer-panel {
+  width: 100%;
+  max-width: 860px;
+  height: 100%;
+  background: var(--bg-surface);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.tailored-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-surface);
+  z-index: 10;
+}
+
+.drawer-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.tailored-drawer-body {
+  padding: var(--space-6);
+  flex: 1;
+}
+
+@media (max-width: 767px) {
+  .tailored-drawer-panel {
+    max-width: 100%;
+  }
+
+  .tailored-drawer-body {
+    padding: var(--space-4);
+  }
+}
+
 
 /* ================================================
    6. RESUME WORKSPACE & TAILORING

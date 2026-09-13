@@ -15,6 +15,7 @@ import {
 export default function TailoredResult({
   result,
   job,
+  existingMatchScore,
   onBack,
   onRegenerate,
 }) {
@@ -31,6 +32,8 @@ export default function TailoredResult({
       : typeof result.resume_match_score === "number"
       ? result.resume_match_score
       : null;
+
+  const baselineScore = existingMatchScore ?? (typeof job?.match_score === "number" ? job.match_score : null);
 
   const changes = Array.isArray(result.changes) ? result.changes : [];
   const supportedKeywords = Array.isArray(result.supported_keywords_added)
@@ -97,7 +100,22 @@ export default function TailoredResult({
 
           <div className="tailored-score-badge">
             {score !== null ? (
-              <ScoreBadge score={score} size="large" />
+              <div className="tailored-score-group" style={{ textAlign: "right" }}>
+                <span className="text-xs text-secondary font-medium" style={{ display: "block", marginBottom: "4px" }}>
+                  Tailored ATS Score
+                </span>
+                <ScoreBadge score={score} size="large" />
+              </div>
+            ) : baselineScore !== null ? (
+              <div className="tailored-score-group" style={{ textAlign: "right" }}>
+                <span className="text-xs text-secondary font-medium" style={{ display: "block", marginBottom: "4px" }}>
+                  Profile Match Score
+                </span>
+                <ScoreBadge score={baselineScore} size="large" />
+                <span className="text-xs text-muted" style={{ display: "block", marginTop: "4px", maxWidth: "200px" }}>
+                  (Tailored ATS score requires backend enhancement)
+                </span>
+              </div>
             ) : (
               <div
                 className="score-unavailable-badge"

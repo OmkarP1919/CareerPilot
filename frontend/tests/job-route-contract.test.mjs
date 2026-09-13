@@ -15,13 +15,16 @@ const result = resolveRedirect("/discover/:id", { id: testId });
 assert.strictEqual(result, `/discover/${testId}`);
 assert.notStrictEqual(result, "/discover/:id", "Must not retain literal :id");
 
-// 2. Sub-path param redirect (/jobs/:id/match -> /discover/:id/match)
-const matchResult = resolveRedirect("/discover/:id/match", { id: testId });
-assert.strictEqual(matchResult, `/discover/${testId}/match`);
-assert.notStrictEqual(matchResult, "/discover/:id/match", "Must not retain literal :id");
+// 2. Backward-compatible consolidated match redirect (/jobs/:id/match -> /discover/:id?tab=fit)
+const matchTabResult = resolveRedirect("/discover/:id?tab=fit", { id: testId });
+assert.strictEqual(matchTabResult, `/discover/${testId}?tab=fit`);
+assert.notStrictEqual(matchTabResult, "/discover/:id?tab=fit", "Must not retain literal :id");
 
-// 3. Numeric ID
+// 3. Numeric ID interpolation
 const numericResult = resolveRedirect("/discover/:id", { id: "42" });
 assert.strictEqual(numericResult, "/discover/42");
+
+const numericMatchResult = resolveRedirect("/discover/:id?tab=fit", { id: "42" });
+assert.strictEqual(numericMatchResult, "/discover/42?tab=fit");
 
 console.log("All route parameter interpolation contract checks passed!");

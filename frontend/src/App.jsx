@@ -51,7 +51,7 @@ export default function App() {
                 <Route path="/dashboard" element={<Navigate to="/home" replace />} />
                 <Route path="/jobs" element={<Navigate to="/discover" replace />} />
                 <Route path="/jobs/:id" element={<RedirectWithParam to="/discover/:id" />} />
-                <Route path="/jobs/:id/match" element={<RedirectWithParam to="/discover/:id/match" />} />
+                <Route path="/jobs/:id/match" element={<RedirectWithParam to="/discover/:id?tab=fit" />} />
                 <Route path="/resume" element={<Navigate to="/resumes" replace />} />
                 <Route path="/applications" element={<Navigate to="/pipeline" replace />} />
                 <Route path="/analytics" element={<Navigate to="/insights" replace />} />
