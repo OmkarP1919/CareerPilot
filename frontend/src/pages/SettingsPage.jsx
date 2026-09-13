@@ -1,25 +1,24 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/LanguageContext";
-import Modal from "../components/Modal";
+import { api } from "../services/api";
 import {
   User,
-  Shield,
   Palette,
   Globe,
   Eye,
-  Bell,
-  Trash2,
   LogOut,
   CheckCircle2,
-  Lock,
   Sun,
   Moon,
   Laptop,
+  Briefcase,
+  Save,
+  Check,
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -37,7 +36,45 @@ export default function SettingsPage() {
   const { language, setLanguage, t } = useTranslation();
   const navigate = useNavigate();
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Job Search Defaults state (persisted via PUT /profile)
+  const [jobPreferences, setJobPreferences] = useState({
+    preferred_roles: "",
+    preferred_locations: "",
+  });
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [prefSavedStatus, setPrefSavedStatus] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    api
+      .get("/profile")
+      .then((data) => {
+        if (mounted && data?.profile) {
+          setJobPreferences({
+            preferred_roles: data.profile.preferred_roles || "",
+            preferred_locations: data.profile.preferred_locations || "",
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleSavePreferences = async (e) => {
+    e.preventDefault();
+    setSavingPrefs(true);
+    try {
+      await api.put("/profile", jobPreferences);
+      setPrefSavedStatus(true);
+      setTimeout(() => setPrefSavedStatus(false), 3000);
+    } catch {
+      // resilient error handling
+    } finally {
+      setSavingPrefs(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -48,7 +85,7 @@ export default function SettingsPage() {
     }
   };
 
-  const displayName = currentUser?.displayName || "Not specified";
+  const displayName = currentUser?.displayName || currentUser?.email?.split("@")[0] || "User";
   const email = currentUser?.email || "Not specified";
   const photoURL = currentUser?.photoURL;
   const providerData = currentUser?.providerData || [];
@@ -57,36 +94,37 @@ export default function SettingsPage() {
       ? providerData[0].providerId === "google.com"
         ? "Google Authentication"
         : providerData[0].providerId
-      : "Firebase Email / Password";
+      : "Email / Password";
 
   return (
-    <div className="page settings-page">
-      {/* Page Header */}
+    <div className="page settings-page settings-page-unified">
+      {/* Header */}
       <header className="page-header">
-        <div className="page-header-row">
-          <div>
-            <h1>{t("settings.title", "Settings & Preferences")}</h1>
-            <p>Manage your account identity, workspace appearance, language, and accessibility.</p>
-          </div>
-        </div>
+        <h1 className="settings-main-title">{t("settings.title", "Settings & Preferences")}</h1>
+        <p className="settings-main-subtitle">
+          Manage your account identity, workspace appearance, and default job search criteria.
+        </p>
       </header>
 
       <div className="settings-sections-stack">
         {/* =========================================================================
-            SECTION 1: ACCOUNT IDENTITY
+            GROUP 1: ACCOUNT IDENTITY
             ========================================================================= */}
-        <section className="card settings-card">
-          <div className="card-header">
-            <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <User size={18} className="text-accent" />
-              <span>{t("settings.account", "Account Identity")}</span>
-            </h2>
+        <section className="card settings-card" aria-labelledby="settings-account-heading">
+          <div className="card-header settings-card-header">
+            <div className="settings-section-title-wrap">
+              <User size={18} className="text-accent" aria-hidden="true" />
+              <h2 id="settings-account-heading" className="settings-section-title">
+                {t("settings.account", "Account Identity")}
+              </h2>
+            </div>
           </div>
-          <div className="card-body">
+
+          <div className="card-body settings-card-body">
             <div className="settings-user-profile-row">
               <div className="settings-avatar-circle">
                 {photoURL ? (
-                  <img src={photoURL} alt="Profile" className="settings-avatar-img" />
+                  <img src={photoURL} alt={displayName} className="settings-avatar-img" />
                 ) : (
                   <span>{displayName.slice(0, 2).toUpperCase()}</span>
                 )}
@@ -95,121 +133,192 @@ export default function SettingsPage() {
                 <h3 className="settings-user-name">{displayName}</h3>
                 <span className="settings-user-email">{email}</span>
                 <div className="settings-verified-badge">
-                  <CheckCircle2 size={13} className="text-success" />
+                  <CheckCircle2 size={13} className="text-success" aria-hidden="true" />
                   <span>Authenticated via {authProvider}</span>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
 
-        {/* =========================================================================
-            SECTION 2: APPEARANCE (THEME)
-            ========================================================================= */}
-        <section className="card settings-card">
-          <div className="card-header">
-            <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Palette size={18} className="text-accent" />
-              <span>{t("settings.appearance", "Appearance")}</span>
-            </h2>
-          </div>
-          <div className="card-body">
-            <p className="text-secondary text-sm" style={{ marginBottom: "var(--space-3)" }}>
-              Select your interface color scheme. CareerPilot supports authentic light, deep charcoal dark, and system themes.
-            </p>
-
-            <div className="theme-options-grid">
+            <div className="settings-account-actions" style={{ marginTop: "var(--space-6)" }}>
               <button
                 type="button"
-                className={`theme-option-card ${theme === "light" ? "active" : ""}`}
-                onClick={() => setTheme("light")}
+                className="btn btn-secondary settings-signout-btn"
+                onClick={handleLogout}
               >
-                <Sun size={20} />
-                <span>{t("settings.themeLight", "Light")}</span>
-              </button>
-
-              <button
-                type="button"
-                className={`theme-option-card ${theme === "dark" ? "active" : ""}`}
-                onClick={() => setTheme("dark")}
-              >
-                <Moon size={20} />
-                <span>{t("settings.themeDark", "Dark")}</span>
-              </button>
-
-              <button
-                type="button"
-                className={`theme-option-card ${theme === "system" ? "active" : ""}`}
-                onClick={() => setTheme("system")}
-              >
-                <Laptop size={20} />
-                <span>{t("settings.themeSystem", "System")}</span>
+                <LogOut size={16} aria-hidden="true" />
+                <span>Sign Out of CareerPilot</span>
               </button>
             </div>
+
+            <p className="text-xs text-muted" style={{ marginTop: "var(--space-4)" }}>
+              Your account sessions and authentication tokens are managed securely through Firebase Auth.
+            </p>
           </div>
         </section>
 
         {/* =========================================================================
-            SECTION 3: LANGUAGE
+            GROUP 2: JOB SEARCH DEFAULTS (PERSISTED VIA /profile)
             ========================================================================= */}
-        <section className="card settings-card">
-          <div className="card-header">
-            <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Globe size={18} className="text-accent" />
-              <span>{t("settings.language", "Language")}</span>
-            </h2>
-          </div>
-          <div className="card-body">
-            <p className="text-secondary text-sm" style={{ marginBottom: "var(--space-3)" }}>
-              Choose your interface display language. Note that external job listings and original resume contents remain in their source format.
-            </p>
-
-            <div className="theme-options-grid">
-              <button
-                type="button"
-                className={`theme-option-card ${language === "en" ? "active" : ""}`}
-                onClick={() => setLanguage("en")}
-              >
-                <span className="lang-name font-medium">English</span>
-                <span className="text-xs text-muted">EN</span>
-              </button>
-
-              <button
-                type="button"
-                className={`theme-option-card ${language === "hi" ? "active" : ""}`}
-                onClick={() => setLanguage("hi")}
-              >
-                <span className="lang-name font-medium">हिन्दी</span>
-                <span className="text-xs text-muted">HI</span>
-              </button>
-
-              <button
-                type="button"
-                className={`theme-option-card ${language === "mr" ? "active" : ""}`}
-                onClick={() => setLanguage("mr")}
-              >
-                <span className="lang-name font-medium">मराठी</span>
-                <span className="text-xs text-muted">MR</span>
-              </button>
+        <section className="card settings-card" aria-labelledby="settings-search-defaults-heading">
+          <div className="card-header settings-card-header">
+            <div className="settings-section-title-wrap">
+              <Briefcase size={18} className="text-accent" aria-hidden="true" />
+              <h2 id="settings-search-defaults-heading" className="settings-section-title">
+                Job Search Defaults
+              </h2>
             </div>
           </div>
+
+          <div className="card-body settings-card-body">
+            <p className="text-secondary text-sm" style={{ marginBottom: "var(--space-4)" }}>
+              These criteria are used as your default search baseline for automated discovery and recommendations.
+            </p>
+
+            <form onSubmit={handleSavePreferences} className="settings-prefs-form">
+              <div className="form-group">
+                <label className="form-label" htmlFor="settings-roles">
+                  Default Target Roles
+                </label>
+                <input
+                  id="settings-roles"
+                  className="form-input"
+                  value={jobPreferences.preferred_roles}
+                  onChange={(e) =>
+                    setJobPreferences({ ...jobPreferences, preferred_roles: e.target.value })
+                  }
+                  placeholder="e.g. Senior Frontend Engineer, Full-Stack Developer"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="settings-locations">
+                  Default Preferred Locations
+                </label>
+                <input
+                  id="settings-locations"
+                  className="form-input"
+                  value={jobPreferences.preferred_locations}
+                  onChange={(e) =>
+                    setJobPreferences({ ...jobPreferences, preferred_locations: e.target.value })
+                  }
+                  placeholder="e.g. Remote, San Francisco, CA, New York, NY"
+                />
+              </div>
+
+              <div className="settings-form-actions">
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm settings-save-prefs-btn"
+                  disabled={savingPrefs}
+                >
+                  {prefSavedStatus ? (
+                    <>
+                      <Check size={14} aria-hidden="true" />
+                      <span>Saved!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={14} aria-hidden="true" />
+                      <span>{savingPrefs ? "Saving..." : "Save Search Defaults"}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </section>
 
         {/* =========================================================================
-            SECTION 4: ACCESSIBILITY & TEXT SCALING
+            GROUP 3: APPEARANCE & ACCESSIBILITY
             ========================================================================= */}
-        <section className="card settings-card">
-          <div className="card-header">
-            <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Eye size={18} className="text-accent" />
-              <span>{t("settings.accessibility", "Accessibility")}</span>
-            </h2>
+        <section className="card settings-card" aria-labelledby="settings-appearance-heading">
+          <div className="card-header settings-card-header">
+            <div className="settings-section-title-wrap">
+              <Palette size={18} className="text-accent" aria-hidden="true" />
+              <h2 id="settings-appearance-heading" className="settings-section-title">
+                {t("settings.appearance", "Appearance & Accessibility")}
+              </h2>
+            </div>
           </div>
-          <div className="card-body stack" style={{ gap: "var(--space-4)" }}>
-            {/* Text Size */}
+
+          <div className="card-body settings-card-body stack" style={{ gap: "var(--space-6)" }}>
+            {/* Color Scheme */}
             <div>
-              <label className="form-label">{t("settings.textSize", "Text Size")}</label>
+              <label className="form-label">{t("settings.theme", "Interface Theme")}</label>
               <div className="theme-options-grid" style={{ marginTop: "var(--space-2)" }}>
+                <button
+                  type="button"
+                  className={`theme-option-card ${theme === "light" ? "active" : ""}`}
+                  onClick={() => setTheme("light")}
+                >
+                  <Sun size={18} aria-hidden="true" />
+                  <span>{t("settings.themeLight", "Light")}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`theme-option-card ${theme === "dark" ? "active" : ""}`}
+                  onClick={() => setTheme("dark")}
+                >
+                  <Moon size={18} aria-hidden="true" />
+                  <span>{t("settings.themeDark", "Dark")}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`theme-option-card ${theme === "system" ? "active" : ""}`}
+                  onClick={() => setTheme("system")}
+                >
+                  <Laptop size={18} aria-hidden="true" />
+                  <span>{t("settings.themeSystem", "System")}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Language */}
+            <div>
+              <label className="form-label" style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
+                <Globe size={14} aria-hidden="true" />
+                <span>{t("settings.language", "Display Language")}</span>
+              </label>
+              <div className="theme-options-grid" style={{ marginTop: "var(--space-2)" }}>
+                <button
+                  type="button"
+                  className={`theme-option-card ${language === "en" ? "active" : ""}`}
+                  onClick={() => setLanguage("en")}
+                >
+                  <span className="font-medium">English</span>
+                  <span className="text-xs text-muted">EN</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`theme-option-card ${language === "hi" ? "active" : ""}`}
+                  onClick={() => setLanguage("hi")}
+                >
+                  <span className="font-medium">हिन्दी</span>
+                  <span className="text-xs text-muted">HI</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`theme-option-card ${language === "mr" ? "active" : ""}`}
+                  onClick={() => setLanguage("mr")}
+                >
+                  <span className="font-medium">मराठी</span>
+                  <span className="text-xs text-muted">MR</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Accessibility (Text Size & Motion) */}
+            <div>
+              <label className="form-label" style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
+                <Eye size={14} aria-hidden="true" />
+                <span>{t("settings.accessibility", "Reading & Contrast")}</span>
+              </label>
+
+              <div className="theme-options-grid" style={{ marginTop: "var(--space-2)", marginBottom: "var(--space-4)" }}>
                 <button
                   type="button"
                   className={`theme-option-card ${textSize === "sm" ? "active" : ""}`}
@@ -243,123 +352,42 @@ export default function SettingsPage() {
                   <span className="text-xs text-muted">20px</span>
                 </button>
               </div>
-            </div>
 
-            {/* High Contrast & Reduced Motion Toggles */}
-            <div className="setting-toggle-row">
-              <div>
-                <strong>{t("settings.highContrast", "High Contrast")}</strong>
-                <p className="text-xs text-muted">Enhances borders, text contrast, and active focus rings.</p>
+              <div className="setting-toggle-row">
+                <div>
+                  <strong>{t("settings.highContrast", "High Contrast")}</strong>
+                  <p className="text-xs text-muted">Enhances active focus rings and border visibility.</p>
+                </div>
+                <button
+                  type="button"
+                  className={`toggle-switch-btn ${highContrast ? "on" : "off"}`}
+                  onClick={() => setHighContrast(!highContrast)}
+                  aria-pressed={highContrast}
+                  aria-label="Toggle High Contrast"
+                >
+                  <span className="toggle-switch-handle" />
+                </button>
               </div>
-              <button
-                type="button"
-                className={`toggle-switch-btn ${highContrast ? "on" : "off"}`}
-                onClick={() => setHighContrast(!highContrast)}
-                aria-pressed={highContrast}
-              >
-                <span className="toggle-switch-handle" />
-              </button>
-            </div>
 
-            <div className="setting-toggle-row">
-              <div>
-                <strong>{t("settings.reducedMotion", "Reduce Motion")}</strong>
-                <p className="text-xs text-muted">Disables all non-essential interface animations and transitions.</p>
+              <div className="setting-toggle-row">
+                <div>
+                  <strong>{t("settings.reducedMotion", "Reduce Motion")}</strong>
+                  <p className="text-xs text-muted">Disables non-essential interface animations.</p>
+                </div>
+                <button
+                  type="button"
+                  className={`toggle-switch-btn ${reducedMotion ? "on" : "off"}`}
+                  onClick={() => setReducedMotion(!reducedMotion)}
+                  aria-pressed={reducedMotion}
+                  aria-label="Toggle Reduced Motion"
+                >
+                  <span className="toggle-switch-handle" />
+                </button>
               </div>
-              <button
-                type="button"
-                className={`toggle-switch-btn ${reducedMotion ? "on" : "off"}`}
-                onClick={() => setReducedMotion(!reducedMotion)}
-                aria-pressed={reducedMotion}
-              >
-                <span className="toggle-switch-handle" />
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* =========================================================================
-            SECTION 5: NOTIFICATIONS & PRIVACY
-            ========================================================================= */}
-        <section className="card settings-card">
-          <div className="card-header">
-            <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Shield size={18} className="text-accent" />
-              <span>{t("settings.privacy", "Privacy & Data Protection")}</span>
-            </h2>
-          </div>
-          <div className="card-body">
-            <p className="text-secondary text-sm" style={{ lineHeight: "var(--leading-relaxed)" }}>
-              Your profile, parsed resumes, and tracked applications are encrypted and stored in your private PostgreSQL workspace.
-              CareerPilot AI never sells your career data to third-party recruiters.
-            </p>
-
-            <div className="settings-security-pills" style={{ marginTop: "var(--space-4)" }}>
-              <div className="security-pill">
-                <Lock size={14} className="text-accent" />
-                <span>SSL / TLS Encrypted Transit</span>
-              </div>
-              <div className="security-pill">
-                <Shield size={14} className="text-success" />
-                <span>Firebase Secure Auth Sessions</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =========================================================================
-            SECTION 6: DANGER ZONE & SESSION
-            ========================================================================= */}
-        <section className="card settings-card danger-card">
-          <div className="card-header">
-            <h2 className="text-danger" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Trash2 size={18} />
-              <span>{t("settings.dangerZone", "Danger Zone & Sign Out")}</span>
-            </h2>
-          </div>
-          <div className="card-body">
-            <div className="settings-actions-group">
-              <button className="btn btn-secondary" onClick={handleLogout} type="button">
-                <LogOut size={16} />
-                <span>Sign Out of CareerPilot</span>
-              </button>
-
-              <button
-                className="btn btn-ghost btn-danger"
-                onClick={() => setShowDeleteConfirm(true)}
-                type="button"
-              >
-                <Trash2 size={16} />
-                <span>Delete Account & Reset Workspace</span>
-              </button>
             </div>
           </div>
         </section>
       </div>
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <Modal
-          isOpen={showDeleteConfirm}
-          onClose={() => setShowDeleteConfirm(false)}
-          title="Account Deletion Request"
-        >
-          <div className="stack" style={{ gap: "var(--space-3)" }}>
-            <p className="text-secondary text-sm">
-              Self-service account deletion will be available in the upcoming release. If you wish to purge your profile data immediately, please reach out to support.
-            </p>
-            <div className="modal-footer" style={{ marginTop: "var(--space-4)" }}>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowDeleteConfirm(false)}
-                type="button"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

@@ -1,8 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
-import Modal from "../components/Modal";
-import EmptyState from "../components/EmptyState";
 import { SkeletonCard } from "../components/Skeleton";
+import ProfileRecordModal from "../components/profile/ProfileRecordModal";
+import ProfileResumeSyncModal from "../components/profile/ProfileResumeSyncModal";
+import {
+  buildResumeProfileDiff,
+  applyResumeProfileSync,
+} from "../components/profile/profileAutofillUtils";
 import {
   Briefcase,
   GraduationCap,
@@ -17,166 +22,148 @@ import {
   MapPin,
   Target,
   FolderGit2,
-  Sparkles,
   Calendar,
+  RefreshCw,
 } from "lucide-react";
 
-const SKILL_CATEGORIES = [
-  "Programming Languages",
-  "Frameworks/Libraries",
-  "Databases",
-  "Developer Tools",
-  "Other Technical Skills",
-];
-
-const emptyForm = {
-  location: "",
-  preferred_roles: "",
-  preferred_locations: "",
-};
-
 export default function ProfilePage() {
+  const { currentUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [editMode, setEditMode] = useState(false);
+  const [savingGoals, setSavingGoals] = useState(false);
   const [notification, setNotification] = useState(null);
 
-  // Modal states
-  const [showEduModal, setShowEduModal] = useState(false);
-  const [eduForm, setEduForm] = useState({ degree: "", college: "", branch: "", graduation_year: "", cgpa: "" });
-  const [editingEdu, setEditingEdu] = useState(null);
+  // Resume Sync states
+  const [parsedResumeData, setParsedResumeData] = useState(null);
+  const [syncDiff, setSyncDiff] = useState(null);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
-  const [showSkillModal, setShowSkillModal] = useState(false);
-  const [skillForm, setSkillForm] = useState({ name: "", category: SKILL_CATEGORIES[0] });
+  // Career Goals inline editing
+  const [editingGoals, setEditingGoals] = useState(false);
+  const [goalsForm, setGoalsForm] = useState({
+    location: "",
+    preferred_roles: "",
+    preferred_locations: "",
+  });
 
-  const [showProjectModal, setShowProjectModal] = useState(false);
-  const [projectForm, setProjectForm] = useState({ name: "", description: "", technologies: "", github_url: "", live_url: "" });
-  const [editingProject, setEditingProject] = useState(null);
+  // Skills quick-add input
+  const [newSkillText, setNewSkillText] = useState("");
+  const [addingSkill, setAddingSkill] = useState(false);
 
-  const [showExpModal, setShowExpModal] = useState(false);
-  const [expForm, setExpForm] = useState({ company: "", role: "", start_date: "", end_date: "", description: "", technologies: "" });
-  const [editingExp, setEditingExp] = useState(null);
-
-  const [showCertModal, setShowCertModal] = useState(false);
-  const [certForm, setCertForm] = useState({ name: "", organization: "", issue_date: "", credential_url: "" });
-  const [editingCert, setEditingCert] = useState(null);
+  // Generic record modal state (experience, project, education, certification)
+  const [recordModalConfig, setRecordModalConfig] = useState({
+    isOpen: false,
+    type: null,
+    initialData: null,
+  });
 
   const notify = (msg, type = "success") => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3500);
   };
 
-  const fetchProfile = useCallback(async () => {
+  // Fetch full profile and resume data
+  const fetchData = useCallback(async () => {
     try {
-      const data = await api.get("/profile");
-      setProfile(data);
-      setForm({
-        location: data.profile.location || "",
-        preferred_roles: data.profile.preferred_roles || "",
-        preferred_locations: data.profile.preferred_locations || "",
-      });
+      const [profileData, resumeList] = await Promise.all([
+        api.get("/profile").catch(() => null),
+        api.get("/resumes").catch(() => []),
+      ]);
+
+      if (profileData) {
+        setProfile(profileData);
+        setGoalsForm({
+          location: profileData.profile?.location || "",
+          preferred_roles: profileData.profile?.preferred_roles || "",
+          preferred_locations: profileData.profile?.preferred_locations || "",
+        });
+      }
+
+      const safeResumes = Array.isArray(resumeList) ? resumeList : [];
+      setResumes(safeResumes);
+
+      // Check if user has a master or parsed resume
+      const masterResume = safeResumes.find((r) => r.is_master) || safeResumes[0];
+      if (masterResume?.id) {
+        try {
+          const parsedRes = await api.get(`/resumes/${masterResume.id}/parsed`);
+          if (parsedRes?.data && Object.keys(parsedRes.data).length > 0) {
+            setParsedResumeData({
+              id: masterResume.id,
+              name: masterResume.original_filename || "Master Resume",
+              data: parsedRes.data,
+            });
+            const diff = buildResumeProfileDiff(parsedRes.data, profileData);
+            setSyncDiff(diff);
+          }
+        } catch {
+          // Gracefully continue if parsed resume is not yet available
+        }
+      }
     } catch {
-      notify("Failed to load profile", "error");
+      notify("Failed to load profile data", "error");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
+    fetchData();
+  }, [fetchData]);
 
-  const handleSaveProfile = async () => {
-    setSaving(true);
+  // Save Career Goals
+  const handleSaveGoals = async (e) => {
+    if (e) e.preventDefault();
+    setSavingGoals(true);
     try {
-      const updated = await api.put("/profile", form);
+      const updated = await api.put("/profile", goalsForm);
       setProfile((prev) => ({ ...prev, profile: updated }));
-      setEditMode(false);
-      notify("Career identity updated successfully.");
+      setEditingGoals(false);
+      notify("Career goals updated.");
     } catch {
-      notify("Failed to update profile", "error");
+      notify("Failed to update career goals", "error");
     } finally {
-      setSaving(false);
+      setSavingGoals(false);
     }
   };
 
-  // Education Handlers
-  const openAddEdu = () => {
-    setEditingEdu(null);
-    setEduForm({ degree: "", college: "", branch: "", graduation_year: "", cgpa: "" });
-    setShowEduModal(true);
-  };
-  const openEditEdu = (edu) => {
-    setEditingEdu(edu.id);
-    setEduForm({
-      degree: edu.degree,
-      college: edu.college,
-      branch: edu.branch || "",
-      graduation_year: edu.graduation_year || "",
-      cgpa: edu.cgpa || "",
-    });
-    setShowEduModal(true);
-  };
-  const handleAddEdu = async () => {
-    try {
-      const newEdu = await api.post("/profile/education", eduForm);
-      setProfile((prev) => ({ ...prev, education: [...prev.education, newEdu] }));
-      setShowEduModal(false);
-      notify("Education added.");
-    } catch {
-      notify("Failed to add education", "error");
-    }
-  };
-  const handleUpdateEdu = async (id) => {
-    try {
-      const updated = await api.put(`/profile/education/${id}`, eduForm);
-      setProfile((prev) => ({
-        ...prev,
-        education: prev.education.map((e) => (e.id === id ? updated : e)),
-      }));
-      setEditingEdu(null);
-      setShowEduModal(false);
-      notify("Education updated.");
-    } catch {
-      notify("Failed to update education", "error");
-    }
-  };
-  const handleDeleteEdu = async (id) => {
-    try {
-      await api.delete(`/profile/education/${id}`);
-      setProfile((prev) => ({
-        ...prev,
-        education: prev.education.filter((e) => e.id !== id),
-      }));
-      notify("Education deleted.");
-    } catch {
-      notify("Failed to delete education", "error");
-    }
-  };
+  // Quick-add Skill
+  const handleAddSkill = async (e) => {
+    if (e) e.preventDefault();
+    const skillName = newSkillText.trim();
+    if (!skillName) return;
 
-  // Skill Handlers
-  const openAddSkill = () => {
-    setSkillForm({ name: "", category: SKILL_CATEGORIES[0] });
-    setShowSkillModal(true);
-  };
-  const handleAddSkill = async () => {
+    // Client deduplication
+    const existing = (profile?.skills || []).some(
+      (s) => (s.skill_name || "").toLowerCase() === skillName.toLowerCase()
+    );
+    if (existing) {
+      notify(`"${skillName}" is already in your profile`, "error");
+      return;
+    }
+
+    setAddingSkill(true);
     try {
-      const newSkill = await api.post("/profile/skills", skillForm);
-      setProfile((prev) => ({ ...prev, skills: [...prev.skills, newSkill] }));
-      setShowSkillModal(false);
-      notify("Skill added to profile.");
+      const created = await api.post("/profile/skills", {
+        name: skillName,
+        category: "Other Technical Skills",
+      });
+      setProfile((prev) => ({ ...prev, skills: [...(prev.skills || []), created] }));
+      setNewSkillText("");
+      notify(`Added ${skillName}`);
     } catch (err) {
       notify(err.message || "Failed to add skill", "error");
+    } finally {
+      setAddingSkill(false);
     }
   };
+
   const handleDeleteSkill = async (id) => {
     try {
       await api.delete(`/profile/skills/${id}`);
       setProfile((prev) => ({
         ...prev,
-        skills: prev.skills.filter((s) => s.id !== id),
+        skills: (prev.skills || []).filter((s) => s.id !== id),
       }));
       notify("Skill removed.");
     } catch {
@@ -184,208 +171,203 @@ export default function ProfilePage() {
     }
   };
 
-  // Project Handlers
-  const openAddProject = () => {
-    setEditingProject(null);
-    setProjectForm({ name: "", description: "", technologies: "", github_url: "", live_url: "" });
-    setShowProjectModal(true);
-  };
-  const openEditProject = (proj) => {
-    setEditingProject(proj.id);
-    setProjectForm({
-      name: proj.name,
-      description: proj.description || "",
-      technologies: proj.technologies || "",
-      github_url: proj.github_url || "",
-      live_url: proj.live_url || "",
-    });
-    setShowProjectModal(true);
-  };
-  const handleAddProject = async () => {
-    try {
-      const newProj = await api.post("/profile/projects", projectForm);
-      setProfile((prev) => ({ ...prev, projects: [...prev.projects, newProj] }));
-      setShowProjectModal(false);
-      notify("Project added.");
-    } catch {
-      notify("Failed to add project", "error");
-    }
-  };
-  const handleUpdateProject = async (id) => {
-    try {
-      const updated = await api.put(`/profile/projects/${id}`, projectForm);
-      setProfile((prev) => ({
-        ...prev,
-        projects: prev.projects.map((p) => (p.id === id ? updated : p)),
-      }));
-      setEditingProject(null);
-      setShowProjectModal(false);
-      notify("Project updated.");
-    } catch {
-      notify("Failed to update project", "error");
-    }
-  };
-  const handleDeleteProject = async (id) => {
-    try {
-      await api.delete(`/profile/projects/${id}`);
-      setProfile((prev) => ({
-        ...prev,
-        projects: prev.projects.filter((p) => p.id !== id),
-      }));
-      notify("Project deleted.");
-    } catch {
-      notify("Failed to delete project", "error");
+  // Resume Sync Confirmation Action
+  const handleConfirmResumeSync = async () => {
+    if (!syncDiff || !parsedResumeData?.data) return;
+    const result = await applyResumeProfileSync(syncDiff, api, profile);
+    if (result.count > 0) {
+      notify(`Successfully added ${result.count} items from ${parsedResumeData.name}!`);
+      await fetchData();
+    } else if (result.errors.length > 0) {
+      notify(`Sync encountered errors: ${result.errors[0]}`, "error");
     }
   };
 
-  // Experience Handlers
-  const openAddExp = () => {
-    setEditingExp(null);
-    setExpForm({ company: "", role: "", start_date: "", end_date: "", description: "", technologies: "" });
-    setShowExpModal(true);
-  };
-  const openEditExp = (exp) => {
-    setEditingExp(exp.id);
-    setExpForm({
-      company: exp.company,
-      role: exp.role,
-      start_date: exp.start_date || "",
-      end_date: exp.end_date || "",
-      description: exp.description || "",
-      technologies: exp.technologies || "",
-    });
-    setShowExpModal(true);
-  };
-  const handleAddExp = async () => {
+  // Generic Record Add / Edit handler
+  const handleSaveRecord = async (formData) => {
+    const { type, initialData } = recordModalConfig;
+    const isEdit = Boolean(initialData?.id);
+    const id = initialData?.id;
+
     try {
-      const newExp = await api.post("/profile/experiences", expForm);
-      setProfile((prev) => ({ ...prev, experiences: [...prev.experiences, newExp] }));
-      setShowExpModal(false);
-      notify("Experience added.");
+      if (type === "experience") {
+        if (isEdit) {
+          const updated = await api.put(`/profile/experiences/${id}`, formData);
+          setProfile((prev) => ({
+            ...prev,
+            experiences: prev.experiences.map((e) => (e.id === id ? updated : e)),
+          }));
+          notify("Experience updated.");
+        } else {
+          const created = await api.post("/profile/experiences", formData);
+          setProfile((prev) => ({
+            ...prev,
+            experiences: [...(prev.experiences || []), created],
+          }));
+          notify("Experience added.");
+        }
+      } else if (type === "project") {
+        if (isEdit) {
+          const updated = await api.put(`/profile/projects/${id}`, formData);
+          setProfile((prev) => ({
+            ...prev,
+            projects: prev.projects.map((p) => (p.id === id ? updated : p)),
+          }));
+          notify("Project updated.");
+        } else {
+          const created = await api.post("/profile/projects", formData);
+          setProfile((prev) => ({
+            ...prev,
+            projects: [...(prev.projects || []), created],
+          }));
+          notify("Project added.");
+        }
+      } else if (type === "education") {
+        if (isEdit) {
+          const updated = await api.put(`/profile/education/${id}`, formData);
+          setProfile((prev) => ({
+            ...prev,
+            education: prev.education.map((e) => (e.id === id ? updated : e)),
+          }));
+          notify("Education updated.");
+        } else {
+          const created = await api.post("/profile/education", formData);
+          setProfile((prev) => ({
+            ...prev,
+            education: [...(prev.education || []), created],
+          }));
+          notify("Education record added.");
+        }
+      } else if (type === "certification") {
+        if (isEdit) {
+          const updated = await api.put(`/profile/certifications/${id}`, formData);
+          setProfile((prev) => ({
+            ...prev,
+            certifications: prev.certifications.map((c) => (c.id === id ? updated : c)),
+          }));
+          notify("Certification updated.");
+        } else {
+          const created = await api.post("/profile/certifications", formData);
+          setProfile((prev) => ({
+            ...prev,
+            certifications: [...(prev.certifications || []), created],
+          }));
+          notify("Certification added.");
+        }
+      }
     } catch {
-      notify("Failed to add experience", "error");
-    }
-  };
-  const handleUpdateExp = async (id) => {
-    try {
-      const updated = await api.put(`/profile/experiences/${id}`, expForm);
-      setProfile((prev) => ({
-        ...prev,
-        experiences: prev.experiences.map((e) => (e.id === id ? updated : e)),
-      }));
-      setEditingExp(null);
-      setShowExpModal(false);
-      notify("Experience updated.");
-    } catch {
-      notify("Failed to update experience", "error");
-    }
-  };
-  const handleDeleteExp = async (id) => {
-    try {
-      await api.delete(`/profile/experiences/${id}`);
-      setProfile((prev) => ({
-        ...prev,
-        experiences: prev.experiences.filter((e) => e.id !== id),
-      }));
-      notify("Experience deleted.");
-    } catch {
-      notify("Failed to delete experience", "error");
+      notify(`Failed to save ${type}`, "error");
     }
   };
 
-  // Certification Handlers
-  const openAddCert = () => {
-    setEditingCert(null);
-    setCertForm({ name: "", organization: "", issue_date: "", credential_url: "" });
-    setShowCertModal(true);
-  };
-  const openEditCert = (cert) => {
-    setEditingCert(cert.id);
-    setCertForm({
-      name: cert.name,
-      organization: cert.organization || "",
-      issue_date: cert.issue_date || "",
-      credential_url: cert.credential_url || "",
-    });
-    setShowCertModal(true);
-  };
-  const handleAddCert = async () => {
+  const handleDeleteRecord = async (type, id) => {
     try {
-      const newCert = await api.post("/profile/certifications", certForm);
-      setProfile((prev) => ({ ...prev, certifications: [...prev.certifications, newCert] }));
-      setShowCertModal(false);
-      notify("Certification added.");
+      if (type === "experience") {
+        await api.delete(`/profile/experiences/${id}`);
+        setProfile((prev) => ({
+          ...prev,
+          experiences: prev.experiences.filter((e) => e.id !== id),
+        }));
+        notify("Experience deleted.");
+      } else if (type === "project") {
+        await api.delete(`/profile/projects/${id}`);
+        setProfile((prev) => ({
+          ...prev,
+          projects: prev.projects.filter((p) => p.id !== id),
+        }));
+        notify("Project deleted.");
+      } else if (type === "education") {
+        await api.delete(`/profile/education/${id}`);
+        setProfile((prev) => ({
+          ...prev,
+          education: prev.education.filter((e) => e.id !== id),
+        }));
+        notify("Education deleted.");
+      } else if (type === "certification") {
+        await api.delete(`/profile/certifications/${id}`);
+        setProfile((prev) => ({
+          ...prev,
+          certifications: prev.certifications.filter((c) => c.id !== id),
+        }));
+        notify("Certification deleted.");
+      }
     } catch {
-      notify("Failed to add certification", "error");
+      notify(`Failed to delete ${type}`, "error");
     }
   };
-  const handleUpdateCert = async (id) => {
-    try {
-      const updated = await api.put(`/profile/certifications/${id}`, certForm);
-      setProfile((prev) => ({
-        ...prev,
-        certifications: prev.certifications.map((c) => (c.id === id ? updated : c)),
-      }));
-      setEditingCert(null);
-      setShowCertModal(false);
-      notify("Certification updated.");
-    } catch {
-      notify("Failed to update certification", "error");
-    }
+
+  const openAddRecord = (type) => {
+    setRecordModalConfig({ isOpen: true, type, initialData: null });
   };
-  const handleDeleteCert = async (id) => {
-    try {
-      await api.delete(`/profile/certifications/${id}`);
-      setProfile((prev) => ({
-        ...prev,
-        certifications: prev.certifications.filter((c) => c.id !== id),
-      }));
-      notify("Certification deleted.");
-    } catch {
-      notify("Failed to delete certification", "error");
-    }
+
+  const openEditRecord = (type, item) => {
+    setRecordModalConfig({ isOpen: true, type, initialData: item });
+  };
+
+  const closeRecordModal = () => {
+    setRecordModalConfig({ isOpen: false, type: null, initialData: null });
   };
 
   if (loading) {
     return (
-      <div className="page">
-        <div className="page-header">
-          <div className="skeleton skeleton-title" style={{ width: 260, height: 32 }} />
-        </div>
-        <div className="grid-2">
-          <SkeletonCard lines={4} />
-          <SkeletonCard lines={4} />
+      <div className="page profile-page-unified" aria-busy="true">
+        <header className="page-header">
+          <div className="skeleton" style={{ width: "240px", height: "32px" }} />
+          <div className="skeleton" style={{ width: "160px", height: "18px", marginTop: "8px" }} />
+        </header>
+        <div className="stack" style={{ gap: "var(--space-6)" }}>
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       </div>
     );
   }
 
-  // Calculate profile completeness
-  const hasSkills = profile?.skills?.length > 0;
-  const hasEdu = profile?.education?.length > 0;
-  const hasProjects = profile?.projects?.length > 0;
-  const hasExp = profile?.experiences?.length > 0;
-  const hasPreferences = !!(profile?.profile?.preferred_roles || profile?.profile?.location);
-
-  const completedCount = [hasSkills, hasEdu, hasProjects, hasExp, hasPreferences].filter(Boolean).length;
-  const completenessPct = Math.round((completedCount / 5) * 100);
+  const displayName = currentUser?.displayName || currentUser?.email?.split("@")[0] || "Career Profile";
+  const userLocation = profile?.profile?.location;
+  const targetRoles = profile?.profile?.preferred_roles;
+  const preferredLocations = profile?.profile?.preferred_locations;
 
   return (
-    <div className="page">
-      {/* === Header === */}
-      <header className="page-header">
-        <div className="page-header-row">
-          <div>
-            <h1>My Career Profile</h1>
-            <p>Your comprehensive professional baseline for precision job matching</p>
+    <div className="page profile-page-unified">
+      {/* === 1. Profile Header === */}
+      <header className="page-header profile-clean-header">
+        <div className="profile-header-main">
+          <div className="profile-avatar-circle">
+            {currentUser?.photoURL ? (
+              <img src={currentUser.photoURL} alt={displayName} className="profile-avatar-img" />
+            ) : (
+              <span>{displayName.slice(0, 2).toUpperCase()}</span>
+            )}
           </div>
-          <div className="page-header-actions">
-            <div className="profile-completeness-badge">
-              <Sparkles size={14} className="text-accent" />
-              <span>Profile Strength: <strong>{completenessPct}%</strong></span>
-            </div>
+          <div className="profile-header-text">
+            <h1 className="profile-title">{displayName}</h1>
+            <p className="profile-subtitle">
+              {targetRoles || "Career Profile"}
+              {userLocation && ` · ${userLocation}`}
+            </p>
           </div>
         </div>
+
+        {/* 2. Prominent Sync from Resume Action */}
+        {parsedResumeData && (
+          <div className="profile-header-sync-action">
+            <button
+              type="button"
+              className="btn btn-outline btn-sm profile-sync-btn"
+              onClick={() => setShowSyncModal(true)}
+              title="Sync skills and experience from your parsed resume"
+            >
+              <RefreshCw size={15} aria-hidden="true" />
+              <span>Update from Resume</span>
+              {syncDiff?.hasChanges && (
+                <span className="badge badge-accent badge-sm" style={{ marginLeft: "4px" }}>
+                  {syncDiff.totalItems} new
+                </span>
+              )}
+            </button>
+          </div>
+        )}
       </header>
 
       {notification && (
@@ -394,284 +376,226 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* === Target Trajectory & Preferences Card === */}
-      <section className="card">
-        <div className="card-header">
-          <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            <Target size={18} className="text-accent" />
-            <span>Target Trajectory & Preferences</span>
-          </h2>
-          {!editMode && (
-            <button className="btn btn-outline btn-sm" onClick={() => setEditMode(true)}>
-              <Edit3 size={14} />
-              <span>Edit Preferences</span>
+      {/* === 3. Target Career Goals Card === */}
+      <section className="card profile-card" aria-labelledby="profile-goals-heading">
+        <div className="card-header profile-card-header">
+          <div className="profile-section-title-wrap">
+            <Target size={18} className="text-accent" aria-hidden="true" />
+            <h2 id="profile-goals-heading" className="profile-section-title">
+              Target Career Goals
+            </h2>
+          </div>
+          {!editingGoals && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setEditingGoals(true)}
+            >
+              <Edit3 size={14} aria-hidden="true" />
+              <span>Edit Goals</span>
             </button>
           )}
         </div>
 
         <div className="card-body">
-          {editMode ? (
-            <div className="profile-edit-form">
+          {editingGoals ? (
+            <form onSubmit={handleSaveGoals} className="profile-edit-form">
               <div className="form-group">
-                <label className="form-label">Current Location</label>
+                <label className="form-label" htmlFor="goal-location">Current Base Location</label>
                 <input
+                  id="goal-location"
                   className="form-input"
-                  value={form.location}
-                  onChange={(e) => setForm({ ...form, location: e.target.value })}
-                  placeholder="e.g. San Francisco, CA (or Remote)"
+                  value={goalsForm.location}
+                  onChange={(e) => setGoalsForm({ ...goalsForm, location: e.target.value })}
+                  placeholder="e.g. San Francisco, CA or Remote"
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Target Job Roles</label>
+                <label className="form-label" htmlFor="goal-roles">Target Job Roles</label>
                 <input
+                  id="goal-roles"
                   className="form-input"
-                  value={form.preferred_roles}
-                  onChange={(e) => setForm({ ...form, preferred_roles: e.target.value })}
+                  value={goalsForm.preferred_roles}
+                  onChange={(e) => setGoalsForm({ ...goalsForm, preferred_roles: e.target.value })}
                   placeholder="e.g. Senior Frontend Engineer, Full-Stack Developer"
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Preferred Work Locations / Remote</label>
+                <label className="form-label" htmlFor="goal-locations">Preferred Work Locations / Remote</label>
                 <input
+                  id="goal-locations"
                   className="form-input"
-                  value={form.preferred_locations}
-                  onChange={(e) => setForm({ ...form, preferred_locations: e.target.value })}
+                  value={goalsForm.preferred_locations}
+                  onChange={(e) => setGoalsForm({ ...goalsForm, preferred_locations: e.target.value })}
                   placeholder="e.g. Remote, New York, Seattle"
                 />
               </div>
               <div className="form-actions" style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
-                <button className="btn btn-primary btn-sm" onClick={handleSaveProfile} disabled={saving}>
-                  <Save size={14} />
-                  <span>{saving ? "Saving..." : "Save Identity"}</span>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={savingGoals}>
+                  <Save size={14} aria-hidden="true" />
+                  <span>{savingGoals ? "Saving..." : "Save Goals"}</span>
                 </button>
                 <button
-                  className="btn btn-outline btn-sm"
-                  onClick={() => {
-                    setEditMode(false);
-                    fetchProfile();
-                  }}
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setEditingGoals(false)}
                 >
-                  <X size={14} />
-                  <span>Cancel</span>
+                  Cancel
                 </button>
               </div>
-            </div>
+            </form>
           ) : (
-            <div className="profile-pref-grid">
-              <div className="profile-pref-item">
-                <div className="pref-label">
-                  <MapPin size={14} />
-                  <span>Current Base</span>
-                </div>
-                <div className="pref-value">{profile?.profile?.location || "Not specified"}</div>
+            <div className="profile-goals-preview-grid">
+              <div className="goals-preview-item">
+                <span className="goals-label">
+                  <MapPin size={14} aria-hidden="true" /> Current Base
+                </span>
+                <span className="goals-value">{userLocation || "Not specified"}</span>
               </div>
-              <div className="profile-pref-item">
-                <div className="pref-label">
-                  <Target size={14} />
-                  <span>Target Roles</span>
-                </div>
-                <div className="pref-value">{profile?.profile?.preferred_roles || "Not specified"}</div>
+              <div className="goals-preview-item">
+                <span className="goals-label">
+                  <Target size={14} aria-hidden="true" /> Target Roles
+                </span>
+                <span className="goals-value">{targetRoles || "Not specified"}</span>
               </div>
-              <div className="profile-pref-item">
-                <div className="pref-label">
-                  <Briefcase size={14} />
-                  <span>Preferred Locations</span>
-                </div>
-                <div className="pref-value">{profile?.profile?.preferred_locations || "Remote Friendly"}</div>
+              <div className="goals-preview-item">
+                <span className="goals-label">
+                  <Briefcase size={14} aria-hidden="true" /> Preferred Locations
+                </span>
+                <span className="goals-value">{preferredLocations || "Remote / Any"}</span>
               </div>
             </div>
           )}
         </div>
       </section>
 
-      {/* === Technical Capabilities & Skills === */}
-      <section className="card">
-        <div className="card-header">
-          <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            <Code2 size={18} className="text-accent" />
-            <span>Technical Capabilities & Skills ({profile?.skills?.length || 0})</span>
-          </h2>
-          <button className="btn btn-primary btn-sm" onClick={openAddSkill}>
-            <Plus size={14} />
-            <span>Add Skill</span>
-          </button>
+      {/* === 4. Technical Skills === */}
+      <section className="card profile-card" aria-labelledby="profile-skills-heading">
+        <div className="card-header profile-card-header">
+          <div className="profile-section-title-wrap">
+            <Code2 size={18} className="text-accent" aria-hidden="true" />
+            <h2 id="profile-skills-heading" className="profile-section-title">
+              Technical Skills ({profile?.skills?.length || 0})
+            </h2>
+          </div>
         </div>
 
         <div className="card-body">
-          {profile?.skills?.length === 0 ? (
-            <EmptyState
-              icon={Code2}
-              title="No technical skills added yet"
-              text="Skills represent 50% of your job fit score. Add programming languages, frameworks, and tools."
-              action={
-                <button className="btn btn-primary btn-sm" onClick={openAddSkill}>
-                  <Plus size={14} /> Add First Skill
-                </button>
-              }
+          {/* Fast Quick-Add Field (No modal required) */}
+          <form onSubmit={handleAddSkill} className="profile-quick-skill-form">
+            <input
+              type="text"
+              className="form-input profile-quick-skill-input"
+              value={newSkillText}
+              onChange={(e) => setNewSkillText(e.target.value)}
+              placeholder="Type a skill and press Enter (e.g. React, Python, PostgreSQL)..."
+              disabled={addingSkill}
             />
-          ) : (
-            <div className="profile-skills-categories">
-              {SKILL_CATEGORIES.map((cat) => {
-                const catSkills = (profile?.skills || []).filter((s) => s.category === cat);
-                if (catSkills.length === 0) return null;
-                return (
-                  <div key={cat} className="profile-skill-category-group">
-                    <h4 className="profile-skill-category-title">{cat}</h4>
-                    <div className="profile-skill-tags-wrap">
-                      {catSkills.map((s) => (
-                        <span key={s.id} className="profile-interactive-skill-tag">
-                          <span>{s.skill_name}</span>
-                          <button
-                            className="skill-remove-btn"
-                            onClick={() => handleDeleteSkill(s.id)}
-                            aria-label={`Remove ${s.skill_name}`}
-                            type="button"
-                          >
-                            <X size={12} />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+            <button
+              type="submit"
+              className="btn btn-primary btn-sm profile-quick-skill-btn"
+              disabled={addingSkill || !newSkillText.trim()}
+            >
+              <Plus size={16} aria-hidden="true" />
+              <span>Add</span>
+            </button>
+          </form>
+
+          {/* Interactive Tag Cloud */}
+          <div className="profile-skills-cloud" style={{ marginTop: "var(--space-4)" }}>
+            {(!profile?.skills || profile.skills.length === 0) ? (
+              <p className="text-sm text-secondary">
+                No skills added yet. Type your key languages and tools above, or sync from your parsed resume.
+              </p>
+            ) : (
+              profile.skills.map((s) => (
+                <span key={s.id} className="profile-skill-chip">
+                  <span>{s.skill_name}</span>
+                  <button
+                    type="button"
+                    className="skill-chip-remove"
+                    onClick={() => handleDeleteSkill(s.id)}
+                    aria-label={`Remove ${s.skill_name}`}
+                  >
+                    <X size={12} aria-hidden="true" />
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
         </div>
       </section>
 
-      {/* === Projects Section === */}
-      <section className="card">
-        <div className="card-header">
-          <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            <FolderGit2 size={18} className="text-accent" />
-            <span>Featured Projects ({profile?.projects?.length || 0})</span>
-          </h2>
-          <button className="btn btn-outline btn-sm" onClick={openAddProject}>
-            <Plus size={14} />
-            <span>Add Project</span>
-          </button>
-        </div>
-
-        <div className="card-body">
-          {profile?.projects?.length === 0 ? (
-            <EmptyState
-              icon={FolderGit2}
-              title="No featured projects added"
-              text="Projects demonstrate hands-on experience and represent 20% of your match calculation."
-              action={
-                <button className="btn btn-secondary btn-sm" onClick={openAddProject}>
-                  <Plus size={14} /> Add Project
-                </button>
-              }
-            />
-          ) : (
-            <div className="profile-entities-list">
-              {profile.projects.map((proj) => (
-                <div key={proj.id} className="profile-entity-card">
-                  <div className="entity-card-content">
-                    <div className="entity-title-row">
-                      <h3 className="entity-name">{proj.name}</h3>
-                      <div className="entity-actions">
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditProject(proj)} title="Edit" aria-label="Edit project">
-                          <Edit3 size={14} />
-                        </button>
-                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteProject(proj.id)} title="Delete" aria-label="Delete project">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {proj.description && <p className="entity-description">{proj.description}</p>}
-
-                    {proj.technologies && (
-                      <div className="entity-tech-row">
-                        <span className="entity-tech-label">Tech Stack:</span>
-                        <span className="entity-tech-tags">{proj.technologies}</span>
-                      </div>
-                    )}
-
-                    <div className="entity-links-row">
-                      {proj.github_url && (
-                        <a href={proj.github_url} target="_blank" rel="noopener noreferrer" className="entity-link">
-                          <ExternalLink size={13} />
-                          <span>GitHub Repository</span>
-                        </a>
-                      )}
-                      {proj.live_url && (
-                        <a href={proj.live_url} target="_blank" rel="noopener noreferrer" className="entity-link">
-                          <ExternalLink size={13} />
-                          <span>Live Demonstration</span>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* === Work Experience === */}
-      <section className="card">
-        <div className="card-header">
-          <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            <Briefcase size={18} className="text-accent" />
-            <span>Work Experience ({profile?.experiences?.length || 0})</span>
-          </h2>
-          <button className="btn btn-outline btn-sm" onClick={openAddExp}>
-            <Plus size={14} />
+      {/* === 5. Work Experience === */}
+      <section className="card profile-card" aria-labelledby="profile-exp-heading">
+        <div className="card-header profile-card-header">
+          <div className="profile-section-title-wrap">
+            <Briefcase size={18} className="text-accent" aria-hidden="true" />
+            <h2 id="profile-exp-heading" className="profile-section-title">
+              Work Experience ({profile?.experiences?.length || 0})
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => openAddRecord("experience")}
+          >
+            <Plus size={14} aria-hidden="true" />
             <span>Add Experience</span>
           </button>
         </div>
 
         <div className="card-body">
-          {profile?.experiences?.length === 0 ? (
-            <EmptyState
-              icon={Briefcase}
-              title="No work history recorded"
-              text="Add past roles, internships, or freelance work (15% match weighting)."
-              action={
-                <button className="btn btn-secondary btn-sm" onClick={openAddExp}>
-                  <Plus size={14} /> Add Work History
-                </button>
-              }
-            />
+          {(!profile?.experiences || profile.experiences.length === 0) ? (
+            <p className="text-sm text-secondary">No work experience entries recorded yet.</p>
           ) : (
-            <div className="profile-timeline-list">
+            <div className="profile-entities-list">
               {profile.experiences.map((exp) => (
-                <div key={exp.id} className="profile-timeline-item">
-                  <div className="timeline-marker" />
-                  <div className="timeline-content">
-                    <div className="entity-title-row">
-                      <div>
-                        <h3 className="entity-name">{exp.role}</h3>
-                        <span className="entity-subtitle">{exp.company}</span>
-                      </div>
-                      <div className="entity-actions">
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditExp(exp)} title="Edit" aria-label="Edit experience">
-                          <Edit3 size={14} />
-                        </button>
-                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteExp(exp.id)} title="Delete" aria-label="Delete experience">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                <div key={exp.id} className="profile-entity-item">
+                  <div className="entity-item-top">
+                    <div>
+                      <h3 className="entity-item-title">{exp.role}</h3>
+                      <span className="entity-item-subtitle">{exp.company}</span>
                     </div>
-
-                    <div className="timeline-date-chip">
-                      <Calendar size={13} />
-                      <span>{exp.start_date} — {exp.end_date || "Present"}</span>
+                    <div className="entity-item-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm"
+                        onClick={() => openEditRecord("experience", exp)}
+                        title="Edit Experience"
+                        aria-label={`Edit ${exp.role} at ${exp.company}`}
+                      >
+                        <Edit3 size={15} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm btn-danger"
+                        onClick={() => handleDeleteRecord("experience", exp.id)}
+                        title="Delete Experience"
+                        aria-label={`Delete ${exp.role} at ${exp.company}`}
+                      >
+                        <Trash2 size={15} aria-hidden="true" />
+                      </button>
                     </div>
-
-                    {exp.description && <p className="entity-description">{exp.description}</p>}
-                    {exp.technologies && (
-                      <div className="entity-tech-row">
-                        <span className="entity-tech-label">Applied Technologies:</span>
-                        <span className="entity-tech-tags">{exp.technologies}</span>
-                      </div>
-                    )}
                   </div>
+
+                  {(exp.start_date || exp.end_date) && (
+                    <div className="entity-date-row">
+                      <Calendar size={13} aria-hidden="true" />
+                      <span>{exp.start_date || "Start"} — {exp.end_date || "Present"}</span>
+                    </div>
+                  )}
+
+                  {exp.description && (
+                    <p className="entity-item-desc">{exp.description}</p>
+                  )}
+
+                  {exp.technologies && (
+                    <div className="entity-tech-line">
+                      <span className="text-muted text-xs">Technologies:</span>
+                      <span className="text-xs font-medium">{exp.technologies}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -679,56 +603,162 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {/* === Education & Academic History === */}
-      <section className="card">
-        <div className="card-header">
-          <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            <GraduationCap size={18} className="text-accent" />
-            <span>Education History ({profile?.education?.length || 0})</span>
-          </h2>
-          <button className="btn btn-outline btn-sm" onClick={openAddEdu}>
-            <Plus size={14} />
+      {/* === 6. Featured Projects === */}
+      <section className="card profile-card" aria-labelledby="profile-proj-heading">
+        <div className="card-header profile-card-header">
+          <div className="profile-section-title-wrap">
+            <FolderGit2 size={18} className="text-accent" aria-hidden="true" />
+            <h2 id="profile-proj-heading" className="profile-section-title">
+              Featured Projects ({profile?.projects?.length || 0})
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => openAddRecord("project")}
+          >
+            <Plus size={14} aria-hidden="true" />
+            <span>Add Project</span>
+          </button>
+        </div>
+
+        <div className="card-body">
+          {(!profile?.projects || profile.projects.length === 0) ? (
+            <p className="text-sm text-secondary">No featured projects added yet.</p>
+          ) : (
+            <div className="profile-entities-list">
+              {profile.projects.map((proj) => (
+                <div key={proj.id} className="profile-entity-item">
+                  <div className="entity-item-top">
+                    <h3 className="entity-item-title">{proj.name}</h3>
+                    <div className="entity-item-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm"
+                        onClick={() => openEditRecord("project", proj)}
+                        title="Edit Project"
+                        aria-label={`Edit ${proj.name}`}
+                      >
+                        <Edit3 size={15} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm btn-danger"
+                        onClick={() => handleDeleteRecord("project", proj.id)}
+                        title="Delete Project"
+                        aria-label={`Delete ${proj.name}`}
+                      >
+                        <Trash2 size={15} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {proj.description && (
+                    <p className="entity-item-desc">{proj.description}</p>
+                  )}
+
+                  {proj.technologies && (
+                    <div className="entity-tech-line">
+                      <span className="text-muted text-xs">Stack:</span>
+                      <span className="text-xs font-medium">{proj.technologies}</span>
+                    </div>
+                  )}
+
+                  {(proj.github_url || proj.live_url) && (
+                    <div className="entity-links-row">
+                      {proj.github_url && (
+                        <a
+                          href={proj.github_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="entity-link"
+                        >
+                          <ExternalLink size={13} aria-hidden="true" />
+                          <span>GitHub Repository</span>
+                        </a>
+                      )}
+                      {proj.live_url && (
+                        <a
+                          href={proj.live_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="entity-link"
+                        >
+                          <ExternalLink size={13} aria-hidden="true" />
+                          <span>Live Demo</span>
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* === 7. Education History === */}
+      <section className="card profile-card" aria-labelledby="profile-edu-heading">
+        <div className="card-header profile-card-header">
+          <div className="profile-section-title-wrap">
+            <GraduationCap size={18} className="text-accent" aria-hidden="true" />
+            <h2 id="profile-edu-heading" className="profile-section-title">
+              Education ({profile?.education?.length || 0})
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => openAddRecord("education")}
+          >
+            <Plus size={14} aria-hidden="true" />
             <span>Add Education</span>
           </button>
         </div>
 
         <div className="card-body">
-          {profile?.education?.length === 0 ? (
-            <EmptyState
-              icon={GraduationCap}
-              title="No educational history added"
-              text="Add your university degree, major, and graduation year."
-              action={
-                <button className="btn btn-secondary btn-sm" onClick={openAddEdu}>
-                  <Plus size={14} /> Add Degree
-                </button>
-              }
-            />
+          {(!profile?.education || profile.education.length === 0) ? (
+            <p className="text-sm text-secondary">No educational history recorded.</p>
           ) : (
             <div className="profile-entities-list">
               {profile.education.map((edu) => (
-                <div key={edu.id} className="profile-entity-card">
-                  <div className="entity-card-content">
-                    <div className="entity-title-row">
-                      <div>
-                        <h3 className="entity-name">{edu.degree}{edu.branch ? ` in ${edu.branch}` : ""}</h3>
-                        <span className="entity-subtitle">{edu.college}</span>
-                      </div>
-                      <div className="entity-actions">
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditEdu(edu)} title="Edit" aria-label="Edit education">
-                          <Edit3 size={14} />
-                        </button>
-                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteEdu(edu.id)} title="Delete" aria-label="Delete education">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                <div key={edu.id} className="profile-entity-item">
+                  <div className="entity-item-top">
+                    <div>
+                      <h3 className="entity-item-title">
+                        {edu.degree}
+                        {edu.branch && ` in ${edu.branch}`}
+                      </h3>
+                      <span className="entity-item-subtitle">{edu.college}</span>
                     </div>
-
-                    <div className="entity-meta-row">
-                      {edu.graduation_year && <span>Class of {edu.graduation_year}</span>}
-                      {edu.cgpa && <span>• CGPA / Grade: {edu.cgpa}</span>}
+                    <div className="entity-item-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm"
+                        onClick={() => openEditRecord("education", edu)}
+                        title="Edit Education"
+                        aria-label={`Edit ${edu.degree}`}
+                      >
+                        <Edit3 size={15} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm btn-danger"
+                        onClick={() => handleDeleteRecord("education", edu.id)}
+                        title="Delete Education"
+                        aria-label={`Delete ${edu.degree}`}
+                      >
+                        <Trash2 size={15} aria-hidden="true" />
+                      </button>
                     </div>
                   </div>
+
+                  {(edu.graduation_year || edu.cgpa) && (
+                    <div className="entity-meta-row">
+                      {edu.graduation_year && <span>Class of {edu.graduation_year}</span>}
+                      {edu.cgpa && <span> · Grade / GPA: {edu.cgpa}</span>}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -736,61 +766,78 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {/* === Certifications === */}
-      <section className="card">
-        <div className="card-header">
-          <h2 style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            <Award size={18} className="text-accent" />
-            <span>Certifications & Credentials ({profile?.certifications?.length || 0})</span>
-          </h2>
-          <button className="btn btn-outline btn-sm" onClick={openAddCert}>
-            <Plus size={14} />
+      {/* === 8. Certifications === */}
+      <section className="card profile-card" aria-labelledby="profile-cert-heading">
+        <div className="card-header profile-card-header">
+          <div className="profile-section-title-wrap">
+            <Award size={18} className="text-accent" aria-hidden="true" />
+            <h2 id="profile-cert-heading" className="profile-section-title">
+              Certifications ({profile?.certifications?.length || 0})
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => openAddRecord("certification")}
+          >
+            <Plus size={14} aria-hidden="true" />
             <span>Add Certification</span>
           </button>
         </div>
 
         <div className="card-body">
-          {profile?.certifications?.length === 0 ? (
-            <EmptyState
-              icon={Award}
-              title="No certifications added yet"
-              text="Add verified certificates from AWS, Google Cloud, Coursera, or industry providers."
-              action={
-                <button className="btn btn-secondary btn-sm" onClick={openAddCert}>
-                  <Plus size={14} /> Add Certification
-                </button>
-              }
-            />
+          {(!profile?.certifications || profile.certifications.length === 0) ? (
+            <p className="text-sm text-secondary">No certifications recorded.</p>
           ) : (
             <div className="profile-entities-list">
               {profile.certifications.map((cert) => (
-                <div key={cert.id} className="profile-entity-card">
-                  <div className="entity-card-content">
-                    <div className="entity-title-row">
-                      <div>
-                        <h3 className="entity-name">{cert.name}</h3>
-                        <span className="entity-subtitle">{cert.organization}</span>
-                      </div>
-                      <div className="entity-actions">
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditCert(cert)} title="Edit" aria-label="Edit certification">
-                          <Edit3 size={14} />
-                        </button>
-                        <button className="btn btn-ghost btn-icon btn-sm btn-danger" onClick={() => handleDeleteCert(cert.id)} title="Delete" aria-label="Delete certification">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                <div key={cert.id} className="profile-entity-item">
+                  <div className="entity-item-top">
+                    <div>
+                      <h3 className="entity-item-title">{cert.name}</h3>
+                      {cert.organization && (
+                        <span className="entity-item-subtitle">{cert.organization}</span>
+                      )}
                     </div>
+                    <div className="entity-item-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm"
+                        onClick={() => openEditRecord("certification", cert)}
+                        title="Edit Certification"
+                        aria-label={`Edit ${cert.name}`}
+                      >
+                        <Edit3 size={15} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm btn-danger"
+                        onClick={() => handleDeleteRecord("certification", cert.id)}
+                        title="Delete Certification"
+                        aria-label={`Delete ${cert.name}`}
+                      >
+                        <Trash2 size={15} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
 
+                  {(cert.issue_date || cert.credential_url) && (
                     <div className="entity-meta-row">
                       {cert.issue_date && <span>Issued: {cert.issue_date}</span>}
                       {cert.credential_url && (
-                        <a href={cert.credential_url} target="_blank" rel="noopener noreferrer" className="entity-link" style={{ marginLeft: 8 }}>
-                          <ExternalLink size={13} />
-                          <span>View Verified Credential</span>
+                        <a
+                          href={cert.credential_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="entity-link"
+                          style={{ marginLeft: "8px" }}
+                        >
+                          <ExternalLink size={13} aria-hidden="true" />
+                          <span>View Credential</span>
                         </a>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -799,332 +846,23 @@ export default function ProfilePage() {
       </section>
 
       {/* === Modals === */}
-      {/* Skill Modal */}
-      <Modal
-        isOpen={showSkillModal}
-        onClose={() => setShowSkillModal(false)}
-        title="Add Technical Skill"
-        footer={
-          <div className="form-actions" style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary btn-sm" onClick={handleAddSkill}>
-              <Save size={14} /> Add Skill
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={() => setShowSkillModal(false)}>
-              Cancel
-            </button>
-          </div>
-        }
-      >
-        <div className="form-group">
-          <label className="form-label">Skill Name *</label>
-          <input
-            className="form-input"
-            value={skillForm.name}
-            onChange={(e) => setSkillForm({ ...skillForm, name: e.target.value })}
-            placeholder="e.g. Python, React, PostgreSQL, Docker"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Category</label>
-          <select
-            className="form-select"
-            value={skillForm.category}
-            onChange={(e) => setSkillForm({ ...skillForm, category: e.target.value })}
-          >
-            {SKILL_CATEGORIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-      </Modal>
+      {/* 1. Resume Sync Confirmation Dialog */}
+      <ProfileResumeSyncModal
+        isOpen={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        diff={syncDiff}
+        resumeName={parsedResumeData?.name}
+        onConfirmSync={handleConfirmResumeSync}
+      />
 
-      {/* Project Modal */}
-      <Modal
-        isOpen={showProjectModal}
-        onClose={() => setShowProjectModal(false)}
-        title={editingProject ? "Edit Featured Project" : "Add Featured Project"}
-        footer={
-          <div className="form-actions" style={{ display: "flex", gap: 8 }}>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={editingProject ? () => handleUpdateProject(editingProject) : handleAddProject}
-            >
-              <Save size={14} /> {editingProject ? "Save Changes" : "Add Project"}
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={() => setShowProjectModal(false)}>
-              Cancel
-            </button>
-          </div>
-        }
-      >
-        <div className="form-group">
-          <label className="form-label">Project Name *</label>
-          <input
-            className="form-input"
-            value={projectForm.name}
-            onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
-            placeholder="e.g. Distributed Task Queue"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Description</label>
-          <textarea
-            className="form-textarea"
-            rows={3}
-            value={projectForm.description}
-            onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
-            placeholder="Describe the problem solved, architectural choices, and impact..."
-          />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Technologies Used</label>
-          <input
-            className="form-input"
-            value={projectForm.technologies}
-            onChange={(e) => setProjectForm({ ...projectForm, technologies: e.target.value })}
-            placeholder="e.g. Python, Redis, FastAPI, Docker"
-          />
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">GitHub URL</label>
-            <input
-              className="form-input"
-              type="url"
-              value={projectForm.github_url}
-              onChange={(e) => setProjectForm({ ...projectForm, github_url: e.target.value })}
-              placeholder="https://github.com/..."
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Live Demo URL</label>
-            <input
-              className="form-input"
-              type="url"
-              value={projectForm.live_url}
-              onChange={(e) => setProjectForm({ ...projectForm, live_url: e.target.value })}
-              placeholder="https://..."
-            />
-          </div>
-        </div>
-      </Modal>
-
-      {/* Experience Modal */}
-      <Modal
-        isOpen={showExpModal}
-        onClose={() => setShowExpModal(false)}
-        title={editingExp ? "Edit Experience" : "Add Work Experience"}
-        footer={
-          <div className="form-actions" style={{ display: "flex", gap: 8 }}>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={editingExp ? () => handleUpdateExp(editingExp) : handleAddExp}
-            >
-              <Save size={14} /> {editingExp ? "Save Changes" : "Add Experience"}
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={() => setShowExpModal(false)}>
-              Cancel
-            </button>
-          </div>
-        }
-      >
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Company *</label>
-            <input
-              className="form-input"
-              value={expForm.company}
-              onChange={(e) => setExpForm({ ...expForm, company: e.target.value })}
-              placeholder="e.g. Stripe"
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Role Title *</label>
-            <input
-              className="form-input"
-              value={expForm.role}
-              onChange={(e) => setExpForm({ ...expForm, role: e.target.value })}
-              placeholder="e.g. Backend Engineer Intern"
-              required
-            />
-          </div>
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Start Date</label>
-            <input
-              className="form-input"
-              value={expForm.start_date}
-              onChange={(e) => setExpForm({ ...expForm, start_date: e.target.value })}
-              placeholder="e.g. Jun 2024"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">End Date</label>
-            <input
-              className="form-input"
-              value={expForm.end_date}
-              onChange={(e) => setExpForm({ ...expForm, end_date: e.target.value })}
-              placeholder="e.g. Aug 2024 (or Present)"
-            />
-          </div>
-        </div>
-        <div className="form-group">
-          <label className="form-label">Description / Achievements</label>
-          <textarea
-            className="form-textarea"
-            rows={3}
-            value={expForm.description}
-            onChange={(e) => setExpForm({ ...expForm, description: e.target.value })}
-            placeholder="Key responsibilities and engineering accomplishments..."
-          />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Technologies</label>
-          <input
-            className="form-input"
-            value={expForm.technologies}
-            onChange={(e) => setExpForm({ ...expForm, technologies: e.target.value })}
-            placeholder="e.g. Go, Kubernetes, PostgreSQL"
-          />
-        </div>
-      </Modal>
-
-      {/* Education Modal */}
-      <Modal
-        isOpen={showEduModal}
-        onClose={() => setShowEduModal(false)}
-        title={editingEdu ? "Edit Education" : "Add Education"}
-        footer={
-          <div className="form-actions" style={{ display: "flex", gap: 8 }}>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={editingEdu ? () => handleUpdateEdu(editingEdu) : handleAddEdu}
-            >
-              <Save size={14} /> {editingEdu ? "Save Changes" : "Add Education"}
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={() => setShowEduModal(false)}>
-              Cancel
-            </button>
-          </div>
-        }
-      >
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Degree *</label>
-            <input
-              className="form-input"
-              value={eduForm.degree}
-              onChange={(e) => setEduForm({ ...eduForm, degree: e.target.value })}
-              placeholder="e.g. B.Tech, B.S."
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Major / Branch</label>
-            <input
-              className="form-input"
-              value={eduForm.branch}
-              onChange={(e) => setEduForm({ ...eduForm, branch: e.target.value })}
-              placeholder="e.g. Computer Science"
-            />
-          </div>
-        </div>
-        <div className="form-group">
-          <label className="form-label">University / College *</label>
-          <input
-            className="form-input"
-            value={eduForm.college}
-            onChange={(e) => setEduForm({ ...eduForm, college: e.target.value })}
-            placeholder="e.g. University of California, Berkeley"
-            required
-          />
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Graduation Year</label>
-            <input
-              className="form-input"
-              value={eduForm.graduation_year}
-              onChange={(e) => setEduForm({ ...eduForm, graduation_year: e.target.value })}
-              placeholder="e.g. 2026"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">CGPA / GPA</label>
-            <input
-              className="form-input"
-              value={eduForm.cgpa}
-              onChange={(e) => setEduForm({ ...eduForm, cgpa: e.target.value })}
-              placeholder="e.g. 3.8 / 4.0"
-            />
-          </div>
-        </div>
-      </Modal>
-
-      {/* Certification Modal */}
-      <Modal
-        isOpen={showCertModal}
-        onClose={() => setShowCertModal(false)}
-        title={editingCert ? "Edit Certification" : "Add Certification"}
-        footer={
-          <div className="form-actions" style={{ display: "flex", gap: 8 }}>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={editingCert ? () => handleUpdateCert(editingCert) : handleAddCert}
-            >
-              <Save size={14} /> {editingCert ? "Save Changes" : "Add Certification"}
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={() => setShowCertModal(false)}>
-              Cancel
-            </button>
-          </div>
-        }
-      >
-        <div className="form-group">
-          <label className="form-label">Certification Name *</label>
-          <input
-            className="form-input"
-            value={certForm.name}
-            onChange={(e) => setCertForm({ ...certForm, name: e.target.value })}
-            placeholder="e.g. AWS Certified Solutions Architect"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Issuing Organization</label>
-          <input
-            className="form-input"
-            value={certForm.organization}
-            onChange={(e) => setCertForm({ ...certForm, organization: e.target.value })}
-            placeholder="e.g. Amazon Web Services, Google Cloud"
-          />
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Issue Date</label>
-            <input
-              className="form-input"
-              value={certForm.issue_date}
-              onChange={(e) => setCertForm({ ...certForm, issue_date: e.target.value })}
-              placeholder="e.g. Jan 2025"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Credential Verification URL</label>
-            <input
-              className="form-input"
-              type="url"
-              value={certForm.credential_url}
-              onChange={(e) => setCertForm({ ...certForm, credential_url: e.target.value })}
-              placeholder="https://..."
-            />
-          </div>
-        </div>
-      </Modal>
+      {/* 2. Generic Record Add/Edit Dialog */}
+      <ProfileRecordModal
+        isOpen={recordModalConfig.isOpen}
+        onClose={closeRecordModal}
+        type={recordModalConfig.type}
+        initialData={recordModalConfig.initialData}
+        onSave={handleSaveRecord}
+      />
     </div>
   );
 }
