@@ -15,7 +15,7 @@ export default function MainLayout() {
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
-      <TopNav />
+      <TopNav onAvatarClick={toggleSheet} />
       <div className="app-shell-container">
         <Sidebar isOpen={false} onClose={() => {}} />
         <main className="main-content" id="main-content">

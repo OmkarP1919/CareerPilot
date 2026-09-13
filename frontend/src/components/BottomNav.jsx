@@ -8,8 +8,8 @@ export default function BottomNav({ onMoreClick }) {
   const navItems = [
     { to: "/home", label: t("nav.home", "Home"), icon: Compass },
     { to: "/discover", label: t("nav.jobs", "Jobs"), icon: Briefcase },
-    { to: "/resumes", label: t("nav.resumes", "Resume"), icon: FileText },
-    { to: "/pipeline", label: t("nav.applications", "Applications"), icon: Layers },
+    { to: "/pipeline", label: t("nav.pipeline", "Pipeline"), icon: Layers },
+    { to: "/resumes", label: t("nav.resumes", "Resumes"), icon: FileText },
   ];
 
   return (

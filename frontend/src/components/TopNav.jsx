@@ -1,26 +1,21 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/LanguageContext";
 import { getInitials } from "../utils/formatters";
 import AccountMenu from "./AccountMenu";
 import {
-  Compass,
-  Briefcase,
-  FileText,
-  Layers,
-  TrendingUp,
   ChevronDown,
   Sun,
   Moon,
   Globe,
 } from "lucide-react";
 
-export default function TopNav() {
+export default function TopNav({ onAvatarClick }) {
   const { currentUser } = useAuth();
   const { theme, setTheme } = useTheme();
-  const { language, setLanguage, t } = useTranslation();
+  const { language, setLanguage } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -28,14 +23,6 @@ export default function TopNav() {
 
   const displayName = currentUser?.displayName || currentUser?.email?.split("@")[0] || "User";
   const initials = getInitials(displayName);
-
-  const navItems = [
-    { to: "/home", label: t("nav.home", "Home"), icon: Compass },
-    { to: "/discover", label: t("nav.jobs", "Find Jobs"), icon: Briefcase },
-    { to: "/resumes", label: t("nav.resumes", "My Resume"), icon: FileText },
-    { to: "/pipeline", label: t("nav.applications", "Applications"), icon: Layers },
-    { to: "/insights", label: t("nav.insights", "Insights"), icon: TrendingUp },
-  ];
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -70,8 +57,16 @@ export default function TopNav() {
     mr: "मराठी",
   };
 
+  const handleUserBtnClick = () => {
+    if (onAvatarClick && window.innerWidth < 1024) {
+      onAvatarClick();
+    } else {
+      setMenuOpen((p) => !p);
+    }
+  };
+
   return (
-    <header className="topnav" aria-label="Main navigation">
+    <header className="topnav" aria-label="Mobile and tablet workspace bar">
       <div className="topnav-inner">
         <div className="topnav-left">
           <Link to="/home" className="topnav-logo" aria-label="CareerPilot AI Home">
@@ -79,22 +74,8 @@ export default function TopNav() {
               <span className="logo-dot" />
             </span>
             <span className="topnav-logo-text">CareerPilot</span>
+            <span className="sidebar-brand-badge">AI</span>
           </Link>
-
-          <nav className="topnav-links" aria-label="Primary navigation">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `topnav-link ${isActive ? "active" : ""}`
-                }
-              >
-                <item.icon size={16} aria-hidden="true" />
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </nav>
         </div>
 
         <div className="topnav-right">
@@ -148,7 +129,7 @@ export default function TopNav() {
           <div className="topnav-user-wrap" ref={menuRef}>
             <button
               className={`topnav-user-btn ${menuOpen ? "open" : ""}`}
-              onClick={() => setMenuOpen((p) => !p)}
+              onClick={handleUserBtnClick}
               aria-label="User account menu"
               aria-expanded={menuOpen}
               aria-haspopup="true"

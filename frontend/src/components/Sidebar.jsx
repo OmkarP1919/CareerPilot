@@ -1,44 +1,62 @@
-import { useRef, useEffect } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useRef, useEffect, useState } from "react";
+import { NavLink, useLocation, useNavigate, Link } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/LanguageContext";
 import { getInitials } from "../utils/formatters";
 import {
   Compass,
   Briefcase,
-  FileText,
   Layers,
-  TrendingUp,
+  FileText,
   User,
   Settings,
   LogOut,
+  Sun,
+  Moon,
+  Globe,
+  ChevronDown,
 } from "lucide-react";
 
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
-  const { t } = useTranslation();
+  const { theme, setTheme } = useTheme();
+  const { language, setLanguage, t } = useTranslation();
+  const [langOpen, setLangOpen] = useState(false);
   const sidebarRef = useRef(null);
+  const langRef = useRef(null);
 
   const displayName = currentUser?.displayName || currentUser?.email?.split("@")[0] || "User";
   const email = currentUser?.email || "";
   const initials = getInitials(displayName);
 
-  const mainNavItems = [
+  // 4 Primary Navigation Items
+  const primaryNavItems = [
     { to: "/home", label: t("nav.home", "Home"), icon: Compass },
     { to: "/discover", label: t("nav.jobs", "Jobs"), icon: Briefcase },
-    { to: "/resumes", label: t("nav.resumes", "Resume"), icon: FileText },
-    { to: "/pipeline", label: t("nav.applications", "Applications"), icon: Layers },
-    { to: "/insights", label: t("nav.insights", "Insights"), icon: TrendingUp },
+    { to: "/pipeline", label: t("nav.pipeline", "Pipeline"), icon: Layers },
+    { to: "/resumes", label: t("nav.resumes", "Resumes"), icon: FileText },
   ];
 
+  // Secondary Navigation Items
   const secondaryNavItems = [
     { to: "/profile", label: t("nav.profile", "Profile"), icon: User },
     { to: "/settings", label: t("nav.settings", "Settings"), icon: Settings },
   ];
+
+  const languageLabels = {
+    en: "English",
+    hi: "हिन्दी",
+    mr: "मराठी",
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
 
   const handleLogout = async () => {
     try {
@@ -49,7 +67,18 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
     }
   };
 
-  // Close on outside click (mobile)
+  // Close language menu on click outside
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (langRef.current && !langRef.current.contains(e.target)) {
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // Close on outside click (mobile/overlay)
   useEffect(() => {
     if (!isOpen) return;
     const handleClick = (e) => {
@@ -79,14 +108,11 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
     if (to === "/discover") {
       return currentPath.startsWith("/discover") || currentPath.startsWith("/jobs");
     }
-    if (to === "/resumes") {
-      return currentPath.startsWith("/resumes") || currentPath.startsWith("/resume");
-    }
     if (to === "/pipeline") {
       return currentPath.startsWith("/pipeline") || currentPath.startsWith("/applications");
     }
-    if (to === "/insights") {
-      return currentPath.startsWith("/insights") || currentPath.startsWith("/analytics");
+    if (to === "/resumes") {
+      return currentPath.startsWith("/resumes") || currentPath.startsWith("/resume");
     }
     if (to === "/profile") {
       return currentPath.startsWith("/profile");
@@ -126,17 +152,24 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
       <aside
         ref={sidebarRef}
         className={`sidebar ${isOpen ? "open" : ""}`}
-        aria-label="Desktop sidebar"
+        aria-label="Workspace navigation"
       >
+        {/* Workspace Brand Header */}
         <div className="sidebar-header">
-          <div className="sidebar-logo">CareerPilot</div>
-          <span className="sidebar-logo-badge">AI</span>
+          <Link to="/home" className="sidebar-brand" aria-label="CareerPilot AI Home">
+            <span className="sidebar-brand-mark" aria-hidden="true">
+              <span className="logo-dot" />
+            </span>
+            <span className="sidebar-brand-text">CareerPilot</span>
+            <span className="sidebar-brand-badge">AI</span>
+          </Link>
         </div>
 
-        <nav className="sidebar-nav" aria-label="Main navigation">
+        {/* Primary Navigation Sections */}
+        <nav className="sidebar-nav" aria-label="Primary workspace navigation">
           <div className="sidebar-section">
-            <span className="sidebar-section-title">Navigation</span>
-            {mainNavItems.map(renderNavLink)}
+            <span className="sidebar-section-title">Workspace</span>
+            {primaryNavItems.map(renderNavLink)}
           </div>
 
           <div className="sidebar-divider" />
@@ -147,26 +180,83 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
           </div>
         </nav>
 
+        {/* Sidebar Footer with Utilities and Profile */}
         <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div className="sidebar-user-avatar">
-              {currentUser?.photoURL ? (
-                <img src={currentUser.photoURL} alt="" />
-              ) : (
-                initials
+          {/* Quick workspace utilities: Theme & Language */}
+          <div className="sidebar-utilities">
+            <button
+              type="button"
+              className="sidebar-utility-btn"
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              aria-label={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+              <span>{theme === "dark" ? "Light" : "Dark"}</span>
+            </button>
+
+            <div className="sidebar-lang-wrap" ref={langRef}>
+              <button
+                type="button"
+                className="sidebar-utility-btn"
+                onClick={() => setLangOpen((p) => !p)}
+                aria-label="Select Language"
+                aria-expanded={langOpen}
+                aria-haspopup="true"
+              >
+                <Globe size={14} />
+                <span>{language.toUpperCase()}</span>
+                <ChevronDown size={12} className="sidebar-chevron" />
+              </button>
+
+              {langOpen && (
+                <div className="sidebar-lang-dropdown" role="menu">
+                  {Object.entries(languageLabels).map(([code, label]) => (
+                    <button
+                      key={code}
+                      type="button"
+                      className={`lang-option ${language === code ? "active" : ""}`}
+                      onClick={() => {
+                        setLanguage(code);
+                        setLangOpen(false);
+                      }}
+                      role="menuitem"
+                    >
+                      <span>{label}</span>
+                      {language === code && <span className="lang-check">✓</span>}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
-            <div className="sidebar-user-info">
-              <div className="sidebar-user-name">{displayName}</div>
-              <div className="sidebar-user-email">{email}</div>
-            </div>
           </div>
-          <button className="sidebar-logout" onClick={handleLogout} aria-label={t("nav.signOut", "Sign Out")}>
-            <span className="sidebar-link-icon">
-              <LogOut size={18} aria-hidden="true" />
-            </span>
-            <span className="sidebar-link-text">{t("nav.signOut", "Sign Out")}</span>
-          </button>
+
+          {/* User profile row */}
+          <div className="sidebar-user-row">
+            <Link to="/profile" className="sidebar-user" title="View Profile">
+              <div className="sidebar-user-avatar">
+                {currentUser?.photoURL ? (
+                  <img src={currentUser.photoURL} alt="" />
+                ) : (
+                  initials
+                )}
+              </div>
+              <div className="sidebar-user-info">
+                <div className="sidebar-user-name">{displayName}</div>
+                <div className="sidebar-user-email">{email}</div>
+              </div>
+            </Link>
+
+            <button
+              type="button"
+              className="sidebar-logout-btn"
+              onClick={handleLogout}
+              title={t("nav.signOut", "Sign Out")}
+              aria-label={t("nav.signOut", "Sign Out")}
+            >
+              <LogOut size={16} aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </aside>
     </>

@@ -175,11 +175,16 @@
   --shadow-focus: 0 0 0 3px rgba(13, 148, 136, 0.2);
   --shadow-focus-danger: 0 0 0 3px rgba(239, 68, 68, 0.2);
 
-  /* === Layout === */
+  /* === Layout & Shell Foundation === */
   --nav-height: 60px;
+  --top-header-height: 52px;
   --mobile-nav-height: 64px;
-  --max-content: 1160px;
-  --max-content-narrow: 840px;
+  --sidebar-width: 236px;
+  --max-content: 1240px;
+  --max-content-narrow: 920px;
+  --control-height: 40px;
+  --control-height-mobile: 44px;
+  --touch-target-min: 44px;
 
   /* === Transitions === */
   --duration-fast: 120ms;

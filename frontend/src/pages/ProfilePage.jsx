@@ -512,7 +512,7 @@ export default function ProfilePage() {
           ) : (
             <div className="profile-skills-categories">
               {SKILL_CATEGORIES.map((cat) => {
-                const catSkills = profile.skills.filter((s) => s.category === cat);
+                const catSkills = (profile?.skills || []).filter((s) => s.category === cat);
                 if (catSkills.length === 0) return null;
                 return (
                   <div key={cat} className="profile-skill-category-group">
