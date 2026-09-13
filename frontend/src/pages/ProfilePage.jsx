@@ -8,6 +8,8 @@ import SkillAutocomplete from "../components/profile/SkillAutocomplete";
 import {
   buildResumeProfileDiff,
   applyResumeProfileSync,
+  formatTechnologies,
+  normalizeTechnologies,
 } from "../components/profile/profileAutofillUtils";
 import {
   Briefcase,
@@ -186,17 +188,21 @@ export default function ProfilePage() {
     const isEdit = Boolean(initialData?.id);
     const id = initialData?.id;
 
+    const payload = (type === "experience" || type === "project")
+      ? { ...formData, technologies: normalizeTechnologies(formData.technologies) }
+      : formData;
+
     try {
       if (type === "experience") {
         if (isEdit) {
-          const updated = await api.put(`/profile/experiences/${id}`, formData);
+          const updated = await api.put(`/profile/experiences/${id}`, payload);
           setProfile((prev) => ({
             ...prev,
             experiences: prev.experiences.map((e) => (e.id === id ? updated : e)),
           }));
           notify("Experience updated.");
         } else {
-          const created = await api.post("/profile/experiences", formData);
+          const created = await api.post("/profile/experiences", payload);
           setProfile((prev) => ({
             ...prev,
             experiences: [...(prev.experiences || []), created],
@@ -205,14 +211,14 @@ export default function ProfilePage() {
         }
       } else if (type === "project") {
         if (isEdit) {
-          const updated = await api.put(`/profile/projects/${id}`, formData);
+          const updated = await api.put(`/profile/projects/${id}`, payload);
           setProfile((prev) => ({
             ...prev,
             projects: prev.projects.map((p) => (p.id === id ? updated : p)),
           }));
           notify("Project updated.");
         } else {
-          const created = await api.post("/profile/projects", formData);
+          const created = await api.post("/profile/projects", payload);
           setProfile((prev) => ({
             ...prev,
             projects: [...(prev.projects || []), created],
@@ -591,10 +597,10 @@ export default function ProfilePage() {
                     <p className="entity-item-desc">{exp.description}</p>
                   )}
 
-                  {exp.technologies && (
+                  {formatTechnologies(exp.technologies) && (
                     <div className="entity-tech-line">
                       <span className="text-muted text-xs">Technologies:</span>
-                      <span className="text-xs font-medium">{exp.technologies}</span>
+                      <span className="text-xs font-medium">{formatTechnologies(exp.technologies)}</span>
                     </div>
                   )}
                 </div>
@@ -658,10 +664,10 @@ export default function ProfilePage() {
                     <p className="entity-item-desc">{proj.description}</p>
                   )}
 
-                  {proj.technologies && (
+                  {formatTechnologies(proj.technologies) && (
                     <div className="entity-tech-line">
                       <span className="text-muted text-xs">Stack:</span>
-                      <span className="text-xs font-medium">{proj.technologies}</span>
+                      <span className="text-xs font-medium">{formatTechnologies(proj.technologies)}</span>
                     </div>
                   )}
 

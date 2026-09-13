@@ -10,6 +10,37 @@
  * Compare parsed resume data against existing profile records.
  * Identifies missing records to add without overwriting or duplicating existing entries.
  */
+
+/**
+ * Safely formats technologies into a trimmed display string or comma-separated list.
+ * Handles string, string[], null/undefined, numbers, booleans, and unexpected shapes.
+ */
+export function formatTechnologies(val) {
+  if (val == null) return "";
+  if (Array.isArray(val)) {
+    return val
+      .map((item) => (typeof item === "string" ? item.trim() : (item != null ? String(item).trim() : "")))
+      .filter(Boolean)
+      .join(", ");
+  }
+  if (typeof val === "string") {
+    return val.trim();
+  }
+  if (typeof val === "number" || typeof val === "boolean") {
+    return String(val).trim();
+  }
+  return "";
+}
+
+/**
+ * Normalizes technologies for backend API payloads or data storage.
+ * Returns a trimmed string or null if empty.
+ */
+export function normalizeTechnologies(val) {
+  const formatted = formatTechnologies(val);
+  return formatted.length > 0 ? formatted : null;
+}
+
 export function buildResumeProfileDiff(parsedData, currentProfile) {
   if (!parsedData || typeof parsedData !== "object") {
     return {
@@ -185,7 +216,7 @@ export function buildResumeProfileDiff(parsedData, currentProfile) {
     projectsToAdd.push({
       name,
       description: (raw.description || (Array.isArray(raw.bullets) ? raw.bullets.join("\n") : "")).trim() || null,
-      technologies: (raw.technologies || "").trim() || null,
+      technologies: normalizeTechnologies(raw.technologies !== undefined ? raw.technologies : raw.tools_used),
       github_url: isGithub ? projectUrl : null,
       live_url: !isGithub && projectUrl ? projectUrl : null,
     });
@@ -299,9 +330,7 @@ export async function applyResumeProfileSync(diff, api, currentProfile) {
     try {
       const payload = {
         ...exp,
-        technologies: Array.isArray(exp.technologies)
-          ? exp.technologies.join(", ")
-          : (exp.technologies || null),
+        technologies: normalizeTechnologies(exp.technologies),
       };
       await api.post("/profile/experiences", payload);
       appliedCount += 1;
@@ -313,7 +342,11 @@ export async function applyResumeProfileSync(diff, api, currentProfile) {
   // 5. Add projects
   for (const proj of diff.toAdd.projects) {
     try {
-      await api.post("/profile/projects", proj);
+      const payload = {
+        ...proj,
+        technologies: normalizeTechnologies(proj.technologies),
+      };
+      await api.post("/profile/projects", payload);
       appliedCount += 1;
     } catch (err) {
       errors.push(`Failed to add project "${proj.name}": ${err.message || "Unknown error"}`);

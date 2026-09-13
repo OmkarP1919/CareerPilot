@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Modal from "../Modal";
 import { Save } from "lucide-react";
+import { formatTechnologies, normalizeTechnologies } from "./profileAutofillUtils";
 
 export default function ProfileRecordModal({
   isOpen,
@@ -15,7 +16,12 @@ export default function ProfileRecordModal({
   useEffect(() => {
     if (!isOpen) return;
     if (initialData) {
-      setFormData({ ...initialData });
+      setFormData({
+        ...initialData,
+        technologies: (type === "experience" || type === "project")
+          ? formatTechnologies(initialData.technologies)
+          : initialData.technologies,
+      });
     } else {
       switch (type) {
         case "experience":
@@ -50,7 +56,10 @@ export default function ProfileRecordModal({
     e.preventDefault();
     setSubmitting(true);
     try {
-      await onSave(formData);
+      const sanitizedData = (type === "experience" || type === "project")
+        ? { ...formData, technologies: normalizeTechnologies(formData.technologies) }
+        : formData;
+      await onSave(sanitizedData);
       onClose();
     } finally {
       setSubmitting(false);

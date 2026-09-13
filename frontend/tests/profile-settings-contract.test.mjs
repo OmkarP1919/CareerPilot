@@ -188,9 +188,12 @@ const autofillUtilsPath = path.join(
 );
 assert.ok(fs.existsSync(autofillUtilsPath), "profileAutofillUtils.js must exist");
 
-const { buildResumeProfileDiff } = await import(
-  `file://${autofillUtilsPath}`
-);
+const {
+  buildResumeProfileDiff,
+  applyResumeProfileSync,
+  formatTechnologies,
+  normalizeTechnologies,
+} = await import(`file://${autofillUtilsPath}`);
 
 // Test empty / invalid input
 const emptyDiff = buildResumeProfileDiff(null, null);
@@ -314,7 +317,140 @@ assert.strictEqual(
 assert.strictEqual(diff.counts.certifications, 1, "Certification should be queued");
 assert.strictEqual(diff.toAdd.certifications[0].name, "AWS Certified Solutions Architect");
 
-console.log("  ok   3. Resume autofill diff and deduplication contracts verified");
+// -----------------------------------------------------------------------------
+// 3.5. Technologies Type Normalization Regression Tests
+// -----------------------------------------------------------------------------
+// a. String input
+assert.strictEqual(formatTechnologies("  Python, FastAPI  "), "Python, FastAPI");
+assert.strictEqual(normalizeTechnologies("  Python, FastAPI  "), "Python, FastAPI");
+assert.strictEqual(formatTechnologies(""), "");
+assert.strictEqual(normalizeTechnologies(""), null);
+assert.strictEqual(formatTechnologies("   "), "");
+assert.strictEqual(normalizeTechnologies("   "), null);
+
+// b. Array input (string[])
+assert.strictEqual(
+  formatTechnologies(["Python", " FastAPI ", "Docker"]),
+  "Python, FastAPI, Docker",
+  "Array of strings must format as comma-separated trimmed string"
+);
+assert.strictEqual(
+  normalizeTechnologies(["Python", " FastAPI ", "Docker"]),
+  "Python, FastAPI, Docker",
+  "Array of strings must normalize as comma-separated string"
+);
+assert.strictEqual(
+  formatTechnologies([" React ", "", "  ", "Next.js"]),
+  "React, Next.js",
+  "Empty strings in array must be filtered out"
+);
+assert.strictEqual(
+  normalizeTechnologies([" React ", "", "  ", "Next.js"]),
+  "React, Next.js"
+);
+
+// c. Null / undefined
+assert.strictEqual(formatTechnologies(null), "");
+assert.strictEqual(normalizeTechnologies(null), null);
+assert.strictEqual(formatTechnologies(undefined), "");
+assert.strictEqual(normalizeTechnologies(undefined), null);
+
+// d. Empty array
+assert.strictEqual(formatTechnologies([]), "");
+assert.strictEqual(normalizeTechnologies([]), null);
+assert.strictEqual(formatTechnologies(["", "   "]), "");
+assert.strictEqual(normalizeTechnologies(["", "   "]), null);
+
+// e. Unexpected non-string/non-array values (numbers, booleans, objects)
+assert.strictEqual(formatTechnologies(123), "123");
+assert.strictEqual(normalizeTechnologies(123), "123");
+assert.strictEqual(formatTechnologies(true), "true");
+assert.strictEqual(normalizeTechnologies(true), "true");
+assert.strictEqual(formatTechnologies({}), "");
+assert.strictEqual(normalizeTechnologies({}), null);
+assert.strictEqual(
+  formatTechnologies(["Python", 42, null, undefined, "Go"]),
+  "Python, 42, Go",
+  "Mixed arrays must format safely"
+);
+
+// f. buildResumeProfileDiff with real parser shape (projects having array technologies)
+const resumeWithDiverseTech = {
+  projects: [
+    { title: "Proj Array", technologies: ["Python", "FastAPI"] }, // The exact production crash trigger
+    { title: "Proj String", technologies: "React, Node.js" },
+    { title: "Proj Null", technologies: null },
+    { title: "Proj Empty Array", technologies: [] },
+    { title: "Proj Number", technologies: 2026 },
+  ],
+  experience: [
+    { company: "Acme", job_title: "Dev", tools_used: ["TypeScript", "GraphQL"] },
+  ],
+};
+
+const diffDiverse = buildResumeProfileDiff(resumeWithDiverseTech, { projects: [], experiences: [] });
+assert.strictEqual(diffDiverse.counts.projects, 5, "All 5 projects should be queued");
+assert.strictEqual(
+  diffDiverse.toAdd.projects[0].technologies,
+  "Python, FastAPI",
+  "Array technologies on projects must normalize to comma-separated string"
+);
+assert.strictEqual(
+  diffDiverse.toAdd.projects[1].technologies,
+  "React, Node.js",
+  "String technologies on projects must be preserved"
+);
+assert.strictEqual(diffDiverse.toAdd.projects[2].technologies, null);
+assert.strictEqual(diffDiverse.toAdd.projects[3].technologies, null);
+assert.strictEqual(diffDiverse.toAdd.projects[4].technologies, "2026");
+
+// Verify experience tools_used array is preserved in diff
+assert.deepStrictEqual(
+  diffDiverse.toAdd.experiences[0].technologies,
+  ["TypeScript", "GraphQL"],
+  "Experience technologies must preserve array from tools_used in diff"
+);
+
+// g. applyResumeProfileSync ensures string/null payloads to API
+const postedPayloads = [];
+const mockApi = {
+  post: async (endpoint, data) => {
+    postedPayloads.push({ endpoint, data });
+    return data;
+  },
+  put: async () => ({}),
+};
+await applyResumeProfileSync(diffDiverse, mockApi, {});
+
+const expPost = postedPayloads.find((p) => p.endpoint === "/profile/experiences");
+assert.strictEqual(
+  expPost.data.technologies,
+  "TypeScript, GraphQL",
+  "applyResumeProfileSync must send normalized string to /profile/experiences"
+);
+
+const projPost = postedPayloads.find((p) => p.endpoint === "/profile/projects");
+assert.strictEqual(
+  projPost.data.technologies,
+  "Python, FastAPI",
+  "applyResumeProfileSync must send normalized string to /profile/projects"
+);
+
+// h. Codebase safety guard: ensure no direct .trim() on .technologies
+const autofillUtilsSrc = fs.readFileSync(autofillUtilsPath, "utf8");
+const forbiddenTrimPatterns = [
+  "technologies.trim",
+  'technologies || "").trim',
+  "technologies || '').trim",
+];
+for (const pattern of forbiddenTrimPatterns) {
+  assert.ok(
+    !autofillUtilsSrc.includes(pattern),
+    `autofillUtils must not contain unsafe pattern: ${pattern}`
+  );
+}
+
+console.log("  ok   3. Resume autofill diff, deduplication, and technologies normalization verified");
 
 // -----------------------------------------------------------------------------
 // 4. Settings Page Contract
