@@ -1,16 +1,28 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "../services/api";
-import { DEFAULT_FILTERS, postedAfterDays } from "../components/DiscoverPanel";
+import { buildDiscoveryPayload } from "../components/jobs/jobUtils";
+
+export const DEFAULT_FILTERS = {
+  query: "",
+  location: "",
+  remote: "",
+  type: "",
+  level: "",
+  salary_min: "",
+  salary_max: "",
+  posted: "",
+  sources: [],
+};
 
 export function useJobSearch() {
-  const [discoverFilters, setDiscoverFilters] = useState(DEFAULT_FILTERS);
   const [availableSources, setAvailableSources] = useState([]);
-  const [discoverLoading, setDiscoverLoading] = useState(false);
-  const [discoverReport, setDiscoverReport] = useState(null);
-  const [discoverError, setDiscoverError] = useState(null);
   const [savedSearches, setSavedSearches] = useState([]);
-  const [saveName, setSaveName] = useState("");
-  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchReport, setSearchReport] = useState(null);
+  const [searchError, setSearchError] = useState(null);
+
+  // Request cancellation / race prevention
+  const activeRequestRef = useRef(0);
 
   const loadSources = useCallback(async () => {
     try {
@@ -35,92 +47,57 @@ export function useJobSearch() {
     loadSavedSearches();
   }, [loadSources, loadSavedSearches]);
 
-  const hasActiveDiscoverFilters = useMemo(() => {
-    return Boolean(
-      discoverFilters.location ||
-      discoverFilters.remote ||
-      discoverFilters.salary_min ||
-      discoverFilters.salary_max ||
-      discoverFilters.posted ||
-      discoverFilters.sources.length > 0
-    );
-  }, [discoverFilters]);
+  const executeSearch = useCallback(async (criteria = {}) => {
+    const requestId = ++activeRequestRef.current;
+    setSearchLoading(true);
+    setSearchError(null);
 
-  const buildRequest = useCallback((queryOverride) => {
-    const effectiveQuery = (queryOverride !== undefined ? queryOverride : discoverFilters.query).trim();
-    return {
-      queries: effectiveQuery ? [effectiveQuery] : [],
-      locations: discoverFilters.location ? [discoverFilters.location.trim()] : [],
-      remote:
-        discoverFilters.remote === "Remote"
-          ? true
-          : discoverFilters.remote === "Onsite"
-          ? false
-          : null,
-      salary_min: discoverFilters.salary_min ? Number(discoverFilters.salary_min) : null,
-      salary_max: discoverFilters.salary_max ? Number(discoverFilters.salary_max) : null,
-      salary_period: "annual",
-      posted_after: postedAfterDays(discoverFilters.posted),
-      sort: "newest",
-      sources: discoverFilters.sources,
-      page_size: 30,
-      include_profile_alignment: true,
-    };
-  }, [discoverFilters]);
+    try {
+      const payload = buildDiscoveryPayload(criteria);
+      const res = await api.discoverFiltered(payload);
 
-  const handleExternalSearch = useCallback(
-    async (queryOverride) => {
-      if (discoverLoading) return null;
-      setDiscoverLoading(true);
-      setDiscoverError(null);
-      try {
-        const payload = buildRequest(queryOverride);
-        const res = await api.discoverFiltered(payload);
-        setDiscoverReport(res);
+      // Prevent race conditions: ignore response if a newer request was dispatched
+      if (requestId === activeRequestRef.current) {
+        setSearchReport(res);
         return res;
-      } catch (err) {
-        const msg = "We couldn't complete the search right now. Please try again.";
-        setDiscoverError(msg);
-        setDiscoverReport(null);
-        throw err;
-      } finally {
-        setDiscoverLoading(false);
       }
-    },
-    [discoverLoading, buildRequest]
-  );
-
-  const toggleSource = useCallback((name) => {
-    setDiscoverFilters((f) => ({
-      ...f,
-      sources: f.sources.includes(name)
-        ? f.sources.filter((s) => s !== name)
-        : [...f.sources, name],
-    }));
+      return null;
+    } catch (err) {
+      if (requestId === activeRequestRef.current) {
+        const msg = "We couldn't complete the search right now. Please try again.";
+        setSearchError(msg);
+        setSearchReport(null);
+        throw err;
+      }
+      return null;
+    } finally {
+      if (requestId === activeRequestRef.current) {
+        setSearchLoading(false);
+      }
+    }
   }, []);
 
   const handleSaveSearch = useCallback(
-    async (queryOverride) => {
-      const name = saveName.trim();
-      if (!name) return false;
+    async (name, criteria = {}) => {
+      const trimmedName = (name || "").trim();
+      if (!trimmedName) return false;
       try {
-        await api.createSavedSearch(name, buildRequest(queryOverride));
-        setShowSaveInput(false);
-        setSaveName("");
+        const payload = buildDiscoveryPayload(criteria);
+        await api.createSavedSearch(trimmedName, payload);
         await loadSavedSearches();
         return true;
       } catch {
         return false;
       }
     },
-    [saveName, buildRequest, loadSavedSearches]
+    [loadSavedSearches]
   );
 
   const handleRunSaved = useCallback(
     async (id) => {
       try {
         const res = await api.runSavedSearch(id);
-        setDiscoverReport(res.report);
+        setSearchReport(res.report);
         await loadSavedSearches();
         return res;
       } catch (err) {
@@ -143,31 +120,18 @@ export function useJobSearch() {
     [loadSavedSearches]
   );
 
-  const resetDiscoverFilters = useCallback(() => {
-    setDiscoverFilters(DEFAULT_FILTERS);
-  }, []);
-
   return {
-    discoverFilters,
-    setDiscoverFilters,
     availableSources,
-    discoverLoading,
-    discoverReport,
-    setDiscoverReport,
-    discoverError,
-    setDiscoverError,
     savedSearches,
-    saveName,
-    setSaveName,
-    showSaveInput,
-    setShowSaveInput,
-    hasActiveDiscoverFilters,
-    handleExternalSearch,
-    toggleSource,
+    searchLoading,
+    searchReport,
+    setSearchReport,
+    searchError,
+    setSearchError,
+    executeSearch,
     handleSaveSearch,
     handleRunSaved,
     handleDeleteSaved,
-    resetDiscoverFilters,
     loadSavedSearches,
   };
 }
