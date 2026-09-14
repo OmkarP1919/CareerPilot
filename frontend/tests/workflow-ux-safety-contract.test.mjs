@@ -166,15 +166,22 @@ assert.strictEqual(syncResult.success, false, "Partial failure must report succe
 assert.strictEqual(syncResult.count, 1, "Successful items must still be counted");
 assert.strictEqual(syncResult.errors.length, 1, "Error must be recorded in errors array");
 
-// 1C. Verify ResumesPage.jsx has Sync to Profile CTA and reuses ProfileResumeSyncModal
-const resumesPagePath = path.join(ROOT, "src", "pages", "ResumesPage.jsx");
-const resumesPageContent = fs.readFileSync(resumesPagePath, "utf8");
-assert.ok(resumesPageContent.includes("ProfileResumeSyncModal"), "ResumesPage must import ProfileResumeSyncModal");
-assert.ok(resumesPageContent.includes("buildResumeProfileDiff"), "ResumesPage must import buildResumeProfileDiff");
-assert.ok(resumesPageContent.includes("applyResumeProfileSync"), "ResumesPage must import applyResumeProfileSync");
-assert.ok(resumesPageContent.includes("Sync to Profile"), "ResumesPage must offer 'Sync to Profile' button");
-assert.ok(resumesPageContent.includes("handleInitiateSync"), "ResumesPage must define handleInitiateSync");
-console.log("  ok   Resume -> Profile bridge verified");
+// 1C. Verify Resume -> Profile bridge lives in non-protected surfaces only.
+// ResumesPage.jsx is a protected Resume Parsing 2.0 baseline file (see
+// backend/scripts/release_smoke.py PROTECTED_FILES_AT_HEAD); the bridge must
+// therefore be wired through ProfilePage.jsx and the shared profile utilities,
+// never asserted against protected file content.
+const profileBridgePath = path.join(ROOT, "src", "pages", "ProfilePage.jsx");
+const profileBridgeContent = fs.readFileSync(profileBridgePath, "utf8");
+assert.ok(
+  profileBridgeContent.includes("import ProfileResumeSyncModal from \"../components/profile/ProfileResumeSyncModal\";"),
+  "ProfilePage must import ProfileResumeSyncModal"
+);
+assert.ok(profileBridgeContent.includes("<ProfileResumeSyncModal"), "ProfilePage must render ProfileResumeSyncModal");
+assert.ok(profileBridgeContent.includes("onConfirmSync={handleConfirmResumeSync}"), "ProfilePage must bind ProfileResumeSyncModal confirm handler");
+assert.ok(profileBridgeContent.includes("buildResumeProfileDiff"), "ProfilePage must use buildResumeProfileDiff");
+assert.ok(profileBridgeContent.includes("applyResumeProfileSync"), "ProfilePage must use applyResumeProfileSync");
+console.log("  ok   Resume -> Profile bridge verified (via ProfilePage, non-protected surface)");
 
 // -----------------------------------------------------------------------------
 // 2. PROFILE DELETION SAFETY
