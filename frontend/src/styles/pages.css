@@ -2726,6 +2726,7 @@
 
 .drawer-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-5);
   display: flex;
@@ -2939,6 +2940,7 @@
     width: 100%;
     max-width: 100%;
     max-height: 85vh;
+    max-height: 85dvh;
     height: auto;
     border-left: none;
     border-top: 1px solid var(--border);
@@ -2959,6 +2961,10 @@
 
   .drawer-grid-2 {
     grid-template-columns: 1fr;
+  }
+
+  .drawer-footer {
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
   }
 
   .unified-job-card {
@@ -7189,229 +7195,6 @@ html[data-theme="dark"] .toggle-switch-btn {
   border-radius: var(--radius-full);
   background: var(--accent);
   color: var(--color-white);
-}
-
-/* Desktop Filter Popover */
-.jobs-filter-panel.desktop-only {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: 450px;
-  max-width: calc(100vw - 32px);
-  max-height: min(560px, calc(100dvh - 275px));
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  z-index: var(--z-dropdown);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0;
-}
-
-.jobs-filter-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border-light);
-  padding: var(--space-2-5) var(--space-4);
-  flex-shrink: 0;
-}
-
-.drawer-header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.drawer-close-btn {
-  color: var(--text-secondary);
-  padding: 4px;
-}
-
-.jobs-filter-panel-body {
-  padding: var(--space-3) var(--space-4);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2-5);
-  flex: 1;
-  min-height: 0;
-}
-
-.filter-panel-title {
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  color: var(--text-primary);
-}
-
-/* 2-Column Grid Layout for Desktop */
-.jobs-filter-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2-5);
-}
-
-.jobs-filter-grid .form-group.col-span-2 {
-  grid-column: 1 / -1;
-}
-
-.jobs-filter-grid .form-group {
-  margin-bottom: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.jobs-filter-grid .form-label {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
-  margin-bottom: 0;
-}
-
-.jobs-filter-grid .form-input,
-.jobs-filter-grid .form-select {
-  height: 40px;
-  min-height: 40px;
-  font-size: var(--text-sm);
-  padding: 0 10px;
-}
-
-/* Accordion sections for progressive disclosure */
-.jobs-filter-accordion {
-  border-top: 1px solid var(--border-light);
-  padding-top: var(--space-2);
-}
-
-.jobs-accordion-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: var(--space-1) 0;
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  color: var(--text-secondary);
-  cursor: pointer;
-  background: none;
-  border: none;
-  transition: color var(--duration-fast) var(--ease-default);
-}
-
-.jobs-accordion-trigger:hover {
-  color: var(--text-primary);
-}
-
-.accordion-label-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1-5);
-}
-
-.jobs-count-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  font-size: 10px;
-  font-weight: var(--weight-bold);
-  border-radius: var(--radius-full);
-  background: var(--accent-light);
-  color: var(--accent);
-}
-
-.jobs-filter-advanced-box,
-.jobs-filter-saved-box {
-  background: var(--bg-surface-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  margin-top: var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2-5);
-}
-
-.save-trigger-btn {
-  align-self: flex-start;
-}
-
-.jobs-filter-panel-actions {
-  padding: var(--space-2-5) var(--space-4);
-  border-top: 1px solid var(--border-light);
-  background: var(--bg-surface);
-  flex-shrink: 0;
-}
-
-.jobs-filter-panel-actions .btn {
-  height: 40px;
-}
-
-/* Mobile Filter Bottom Drawer */
-.jobs-filter-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(2px);
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: flex-end;
-}
-
-.jobs-filter-drawer {
-  width: 100%;
-  max-height: 85dvh;
-  background: var(--bg-surface);
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  box-shadow: var(--shadow-xl);
-  padding: var(--space-3) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  animation: slideUpDrawer 0.25s var(--ease-default);
-}
-
-@keyframes slideUpDrawer {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-.drawer-handle {
-  width: 36px;
-  height: 4px;
-  background: var(--slate-300);
-  border-radius: var(--radius-full);
-  align-self: center;
-  margin-bottom: var(--space-1);
-}
-
-.jobs-drawer-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  overflow-y: auto;
-  max-height: calc(85dvh - 130px);
-  padding-right: 2px;
-}
-
-.jobs-drawer-body .jobs-filter-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2-5);
-}
-
-@media (max-width: 480px) {
-  .jobs-drawer-body .jobs-filter-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Empty State Action Container */

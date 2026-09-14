@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X, Bookmark, ListChecks, Play, Trash2, SlidersHorizontal, ChevronDown, ChevronUp } from "lucide-react";
 
 export const WORK_MODES = ["", "Remote", "Hybrid", "Onsite"];
@@ -119,7 +120,7 @@ export default function JobFilterDrawer({
     }
   };
 
-  return (
+  const drawerContent = (
     <div
       className="jobs-filter-drawer-backdrop"
       onClick={onClose}
@@ -447,4 +448,10 @@ export default function JobFilterDrawer({
       </aside>
     </div>
   );
+
+  if (typeof document === "undefined") {
+    return drawerContent;
+  }
+
+  return createPortal(drawerContent, document.body);
 }

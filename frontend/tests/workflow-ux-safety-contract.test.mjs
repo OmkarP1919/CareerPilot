@@ -413,4 +413,86 @@ assert.ok(sidebarContent.includes('{ to: "/profile"'), "Profile must remain in s
 assert.ok(sidebarContent.includes('{ to: "/settings"'), "Settings must remain in secondary navigation");
 console.log("  ok   Sidebar Insights navigation contract verified");
 
+// -----------------------------------------------------------------------------
+// 6. JOBS FILTER DRAWER LAYOUT & WORKSPACE SHELL POSITIONING
+// -----------------------------------------------------------------------------
+console.log("6. Testing Jobs Filter Drawer Layout & Positioning...");
+
+const jobFilterDrawerPath = path.join(ROOT, "src", "components", "jobs", "JobFilterDrawer.jsx");
+const jobFilterDrawerContent = fs.readFileSync(jobFilterDrawerPath, "utf8");
+
+// Portal to document.body
+assert.ok(
+  jobFilterDrawerContent.includes('import { createPortal } from "react-dom";'),
+  "JobFilterDrawer must import createPortal from react-dom"
+);
+assert.ok(
+  jobFilterDrawerContent.includes("createPortal(drawerContent, document.body)"),
+  "JobFilterDrawer must mount drawerContent to document.body via createPortal"
+);
+
+// CSS rules verification
+const pagesCssPath = path.join(ROOT, "src", "styles", "pages.css");
+const pagesCssContent = fs.readFileSync(pagesCssPath, "utf8");
+
+// No undefined --z-modal
+assert.ok(
+  !pagesCssContent.includes("var(--z-modal)"),
+  "pages.css must not use undefined --z-modal"
+);
+
+// No orphaned jobs-filter-panel or duplicate unscoped drawer
+assert.ok(
+  !pagesCssContent.includes(".jobs-filter-panel.desktop-only"),
+  "pages.css must not contain stale .jobs-filter-panel styles"
+);
+assert.ok(
+  !pagesCssContent.includes("slideUpDrawer"),
+  "pages.css must not contain rogue slideUpDrawer keyframes"
+);
+
+// Exactly one desktop .jobs-filter-drawer definition and one in media query
+const drawerMatches = pagesCssContent.match(/\.jobs-filter-drawer\s*\{/g);
+assert.strictEqual(
+  drawerMatches?.length,
+  2,
+  "There must be exactly 2 .jobs-filter-drawer blocks in pages.css (1 desktop base, 1 mobile media query)"
+);
+
+// Desktop right slide-over contracts
+assert.ok(
+  pagesCssContent.includes("width: 440px;"),
+  "Desktop .jobs-filter-drawer must be 440px wide"
+);
+assert.ok(
+  pagesCssContent.includes("justify-content: flex-end;"),
+  "Desktop .jobs-filter-drawer-backdrop must align drawer to right side via justify-content: flex-end"
+);
+assert.ok(
+  pagesCssContent.includes("z-index: 1000;"),
+  "Desktop .jobs-filter-drawer-backdrop must have z-index: 1000 (above persistent desktop sidebar z-index: 40)"
+);
+assert.ok(
+  pagesCssContent.includes("z-index: 1001;"),
+  "Desktop .jobs-filter-drawer must have z-index: 1001"
+);
+
+// Mobile bottom-sheet contract
+assert.ok(
+  pagesCssContent.includes("@media (max-width: 768px)"),
+  "Mobile bottom sheet styles must be scoped under @media (max-width: 768px)"
+);
+assert.ok(
+  pagesCssContent.includes("animation: slideInUp"),
+  "Mobile drawer must use slideInUp animation"
+);
+
+// Drawer body scroll contract
+assert.ok(
+  pagesCssContent.includes("min-height: 0;"),
+  ".drawer-body must have min-height: 0 for reliable flex scroll"
+);
+
+console.log("  ok   Jobs filter drawer layout, portal mounting, and viewport contracts verified");
+
 console.log("\nAll Workflow Integrity & UX Safety (Phase 7.0C.2) contract tests passed successfully!");
