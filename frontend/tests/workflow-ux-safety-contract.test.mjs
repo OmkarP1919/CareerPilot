@@ -495,4 +495,218 @@ assert.ok(
 
 console.log("  ok   Jobs filter drawer layout, portal mounting, and viewport contracts verified");
 
-console.log("\nAll Workflow Integrity & UX Safety (Phase 7.0C.2) contract tests passed successfully!");
+// -----------------------------------------------------------------------------
+// 7. RESUME TAILORING CURATION (Phase 7.0C.3)
+// -----------------------------------------------------------------------------
+console.log("\n7. Testing Resume Tailoring Curation (Phase 7.0C.3)...");
+
+const tailoringModalPath = path.join(ROOT, "src", "components", "TailoringModal.jsx");
+const tailoringModalContent = fs.readFileSync(tailoringModalPath, "utf-8");
+
+const jobDetailsPagePath = path.join(ROOT, "src", "pages", "JobDetailsPage.jsx");
+const jobDetailsPageContent = fs.readFileSync(jobDetailsPagePath, "utf-8");
+
+const apiJsPath = path.join(ROOT, "src", "services", "api.js");
+const apiJsContent = fs.readFileSync(apiJsPath, "utf-8");
+
+// 1. TailoringModal has curate step
+assert.ok(
+  tailoringModalContent.includes('step === "curate"') &&
+    tailoringModalContent.includes("Choose What to Include") &&
+    tailoringModalContent.includes("Choose Master Resume"),
+  "TailoringModal must include the 'curate' wizard step ('Choose What to Include')"
+);
+
+// 2. Experience selection exists
+assert.ok(
+  tailoringModalContent.includes("selectedExpIndices") &&
+    tailoringModalContent.includes("toggleExperience") &&
+    tailoringModalContent.includes("Experiences ("),
+  "TailoringModal must support experience selection toggle with index tracking"
+);
+
+// 3. Project selection exists
+assert.ok(
+  tailoringModalContent.includes("selectedProjIndices") &&
+    tailoringModalContent.includes("toggleProject") &&
+    tailoringModalContent.includes("Projects ("),
+  "TailoringModal must support project selection toggle with index tracking"
+);
+
+// 4. Match evidence badges exist
+assert.ok(
+  tailoringModalContent.includes("curate-badge-match") &&
+    tailoringModalContent.includes("Relevant to job") &&
+    tailoringModalContent.includes("isExperienceMatched") &&
+    tailoringModalContent.includes("isProjectMatched"),
+  "TailoringModal must display 'Relevant to job' match badge using deterministic match evidence"
+);
+
+// 5. Explicit empty selection is represented correctly
+assert.ok(
+  tailoringModalContent.includes("curation-empty-notice") &&
+    tailoringModalContent.includes("remaining available sections such as summary, skills, and education"),
+  "TailoringModal must display calm informational notice when user selects zero items"
+);
+// Make sure generation button is NOT disabled by empty selection
+assert.ok(
+  !tailoringModalContent.includes("disabled={selectedExpIndices.length === 0"),
+  "Generate button must not be blocked solely because selection is empty"
+);
+
+// 6. api.tailorResume accepts curation
+assert.ok(
+  apiJsContent.includes("tailorResume(jobId, resumeId, regenerate = false, curation = {})") &&
+    apiJsContent.includes("payload.selected_experience_indices = curation.selected_experience_indices") &&
+    apiJsContent.includes("payload.selected_project_indices = curation.selected_project_indices"),
+  "api.tailorResume must accept curation and forward selected indices"
+);
+
+// 7. JobDetailsPage passes matchData
+assert.ok(
+  jobDetailsPageContent.includes("matchData={matchData}"),
+  "JobDetailsPage must pass matchData to TailoringModal"
+);
+
+// 8. Responsive curation styles exist
+assert.ok(
+  pagesCssContent.includes(".curation-step-body") &&
+    pagesCssContent.includes(".curate-section") &&
+    pagesCssContent.includes(".curate-item-card") &&
+    pagesCssContent.includes(".curate-checkbox-wrap") &&
+    pagesCssContent.includes("min-width: 44px;") &&
+    pagesCssContent.includes("min-height: 44px;") &&
+    pagesCssContent.includes(".curate-badge-match"),
+  "pages.css must include responsive curation styles with >= 44px touch targets"
+);
+
+// -----------------------------------------------------------------------------
+// BLOCKER 1 CONTRACT VERIFICATION — DETERMINISTIC MATCH EVIDENCE & NO HEURISTICS
+// -----------------------------------------------------------------------------
+const curationUtilsPath = path.join(ROOT, "src", "components", "tailoringCurationUtils.js");
+const curationUtilsContent = fs.readFileSync(curationUtilsPath, "utf-8");
+const { isExperienceMatched, isProjectMatched, deriveInitialSelections } = await import(`file://${curationUtilsPath}`);
+
+// 1. RelevantExperience object fields are used
+assert.ok(
+  curationUtilsContent.includes("re.job_title") &&
+    curationUtilsContent.includes("re.company"),
+  "isExperienceMatched must inspect re.job_title and re.company object fields"
+);
+
+// 2. RelevantProject object fields are used
+assert.ok(
+  curationUtilsContent.includes("rp.name"),
+  "isProjectMatched must inspect rp.name object field"
+);
+
+// 3. String(object) is NOT used for matching
+assert.ok(
+  !curationUtilsContent.includes("String(re)") &&
+    !curationUtilsContent.includes("String(rp)"),
+  "Matching must compare object properties directly, not String(object)"
+);
+
+// 4. Heuristic matched_skills / title keyword / description logic is NOT used
+assert.ok(
+  !curationUtilsContent.includes("matched_skills") &&
+    !curationUtilsContent.includes("jobWords") &&
+    !curationUtilsContent.includes("responsibilities"),
+  "Heuristic matched_skills, title keyword splitting, and description matching must be removed"
+);
+
+// 5. Deterministic evidence -> matching records selected
+const testParsed = {
+  experience: [
+    { role: "Backend Engineer", company: "Acme Corp" },
+    { role: "Barista", company: "Coffee Shop" },
+  ],
+  projects: [
+    { name: "Cloud API Gateway" },
+    { name: "Personal Blog" },
+  ],
+};
+
+const deterministicMatchData = {
+  relevant_experience: [
+    { job_title: "Backend Engineer", company: "Acme Corp", relevance_score: 90 },
+  ],
+  relevant_projects: [
+    { name: "Cloud API Gateway", relevance_score: 85 },
+  ],
+  matched_skills: ["Barista", "Coffee", "Blog"], // Intentionally includes non-match skills
+};
+
+const initialWithEvidence = deriveInitialSelections(testParsed, deterministicMatchData);
+assert.deepStrictEqual(
+  initialWithEvidence.selectedExpIndices,
+  [0],
+  "Deterministic evidence must select ONLY identified experience index [0]"
+);
+assert.deepStrictEqual(
+  initialWithEvidence.selectedProjIndices,
+  [0],
+  "Deterministic evidence must select ONLY identified project index [0]"
+);
+
+// 6. No usable deterministic evidence -> all records selected
+const noEvidenceMatchData = {
+  relevant_experience: [],
+  relevant_projects: [],
+  matched_skills: ["Python"],
+};
+const initialNoEvidence = deriveInitialSelections(testParsed, noEvidenceMatchData);
+assert.deepStrictEqual(
+  initialNoEvidence.selectedExpIndices,
+  [0, 1],
+  "When deterministic evidence identifies no records, all experiences must be selected"
+);
+assert.deepStrictEqual(
+  initialNoEvidence.selectedProjIndices,
+  [0, 1],
+  "When deterministic evidence identifies no records, all projects must be selected"
+);
+
+// 7. No heuristic evidence -> partial selection must NOT occur
+const partialHeuristicMatchData = {
+  relevant_experience: null,
+  relevant_projects: null,
+  matched_skills: ["Backend Engineer"], // Should NOT trigger partial selection
+};
+const initialHeuristicOnly = deriveInitialSelections(testParsed, partialHeuristicMatchData);
+assert.deepStrictEqual(
+  initialHeuristicOnly.selectedExpIndices,
+  [0, 1],
+  "Heuristic skills alone must never cause partial selection of experiences"
+);
+assert.deepStrictEqual(
+  initialHeuristicOnly.selectedProjIndices,
+  [0, 1],
+  "Heuristic skills alone must never cause partial selection of projects"
+);
+
+// 8. Relevant badges use deterministic evidence
+assert.strictEqual(
+  isExperienceMatched(testParsed.experience[0], deterministicMatchData),
+  true,
+  "Matched experience must return true for badge"
+);
+assert.strictEqual(
+  isExperienceMatched(testParsed.experience[1], deterministicMatchData),
+  false,
+  "Unmatched experience must return false for badge even if matched_skills has overlapping words"
+);
+assert.strictEqual(
+  isProjectMatched(testParsed.projects[0], deterministicMatchData),
+  true,
+  "Matched project must return true for badge"
+);
+assert.strictEqual(
+  isProjectMatched(testParsed.projects[1], deterministicMatchData),
+  false,
+  "Unmatched project must return false for badge even if matched_skills has overlapping words"
+);
+
+console.log("  ok   Resume Tailoring Curation frontend contracts verified");
+
+console.log("\nAll Workflow Integrity & UX Safety contract tests passed successfully!");

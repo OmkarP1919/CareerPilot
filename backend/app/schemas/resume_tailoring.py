@@ -65,6 +65,8 @@ class TailoredResumeContent(BaseModel):
 class TailorResumeRequest(BaseModel):
     resume_id: str
     regenerate: bool = False
+    selected_experience_indices: Optional[List[int]] = None
+    selected_project_indices: Optional[List[int]] = None
 
 
 # =============================================================================

@@ -159,11 +159,18 @@ export const api = {
     return this.get(`/jobs/${jobId}/resume-analysis/${resumeId}`);
   },
 
-  tailorResume(jobId, resumeId, regenerate = false) {
-    return this.post(`/jobs/${jobId}/resume-tailor`, {
+  tailorResume(jobId, resumeId, regenerate = false, curation = {}) {
+    const payload = {
       resume_id: resumeId,
       regenerate,
-    });
+    };
+    if (curation?.selected_experience_indices !== undefined && curation?.selected_experience_indices !== null) {
+      payload.selected_experience_indices = curation.selected_experience_indices;
+    }
+    if (curation?.selected_project_indices !== undefined && curation?.selected_project_indices !== null) {
+      payload.selected_project_indices = curation.selected_project_indices;
+    }
+    return this.post(`/jobs/${jobId}/resume-tailor`, payload);
   },
 
   getTailoredResumes() {

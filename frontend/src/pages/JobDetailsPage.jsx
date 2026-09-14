@@ -302,6 +302,7 @@ export default function JobDetailsPage() {
           isOpen={tailorModalOpen}
           onClose={() => setTailorModalOpen(false)}
           job={job}
+          matchData={matchData}
           onSuccess={handleTailorSuccess}
         />
       )}

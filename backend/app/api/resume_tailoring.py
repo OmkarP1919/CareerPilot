@@ -8,6 +8,7 @@ AI call unless explicitly requested, and it reuses an existing tailoring for the
 same (user, resume, job) instead of generating an uncontrolled duplicate.
 """
 
+from copy import deepcopy
 from typing import Optional
 
 import logging
@@ -153,9 +154,17 @@ def _existing_tailoring(user: User, job_id: str, resume: Resume, db: Session) ->
     )
 
 
-def _original_content_view(resume: Resume) -> dict:
-    """Build the original resume content view from parsed data (never modified)."""
-    parsed = resume.parsed_data or {}
+def _original_content_view(resume: Optional[Resume] = None, structured_data: Optional[dict] = None) -> dict:
+    """Build the original resume content view for before/after comparison.
+
+    When curation was used, uses the curated source snapshot stored on the
+    tailoring record so before/after comparison reflects only the curated items.
+    The database master resume (Resume.parsed_data) is never modified.
+    """
+    if structured_data and isinstance(structured_data, dict) and structured_data.get("_curated_source"):
+        parsed = structured_data["_curated_source"]
+    else:
+        parsed = (resume.parsed_data if resume else None) or {}
     return {
         "summary": "",
         "skills": parsed.get("skills") or [],
@@ -167,13 +176,14 @@ def _original_content_view(resume: Resume) -> dict:
 
 
 def _to_response(t: TailoredResume, resume: Optional[Resume] = None) -> TailorResumeResponse:
+    has_source = bool(resume) or bool(t.structured_data and isinstance(t.structured_data, dict) and t.structured_data.get("_curated_source"))
     return TailorResumeResponse(
         id=t.id,
         resume_id=t.source_resume_id,
         job_id=t.job_id,
         status="completed",
         source_version="original",
-        original_content=_original_content_view(resume) if resume else {},
+        original_content=_original_content_view(resume, t.structured_data) if has_source else {},
         tailored_content=summarise_for_response(t.structured_data or {}),
         changes=t.changes or [],
         supported_keywords_added=t.supported_keywords_added or [],
@@ -204,17 +214,55 @@ def tailor_resume(
             detail="This job does not have enough description or required skills to tailor against.",
         )
 
+    has_curation = (
+        body.selected_experience_indices is not None
+        or body.selected_project_indices is not None
+    )
+
     # --- Cost / safety control: reuse existing tailoring when present --------
     existing = _existing_tailoring(user, job_id, resume, db)
-    if existing and not body.regenerate:
+    if existing and not body.regenerate and not has_curation:
         logger.info(
             "Reusing existing tailoring user=%s resume=%s job=%s",
             user.id, resume.id, job_id,
         )
         return _to_response(existing, resume)
 
+    # --- Curate resume content in an isolated copy (master never modified) ---
+    raw_parsed = deepcopy(resume.parsed_data or {})
+    curated_parsed = deepcopy(raw_parsed)
+
+    if body.selected_experience_indices is not None:
+        source_exp = raw_parsed.get("experience") or []
+        valid_exp_indices = {
+            i for i in body.selected_experience_indices
+            if isinstance(i, int) and 0 <= i < len(source_exp)
+        }
+        curated_parsed["experience"] = [
+            exp for idx, exp in enumerate(source_exp) if idx in valid_exp_indices
+        ]
+
+    if body.selected_project_indices is not None:
+        source_proj = raw_parsed.get("projects") or []
+        valid_proj_indices = {
+            i for i in body.selected_project_indices
+            if isinstance(i, int) and 0 <= i < len(source_proj)
+        }
+        curated_parsed["projects"] = [
+            proj for idx, proj in enumerate(source_proj) if idx in valid_proj_indices
+        ]
+
     # --- Phase 2 Resume Match as grounding layer -----------------------------
-    grounding = _get_or_create_analysis(user, job, resume, db)
+    # When curation is active, derive grounding strictly from curated_parsed
+    # so excluded experience/project identities cannot leak into the AI prompt.
+    # For uncurated requests, preserve existing cached/stored analysis.
+    if has_curation:
+        grounding = resume_match.analyze_resume_against_job(curated_parsed, job)
+    else:
+        grounding = _get_or_create_analysis(user, job, resume, db)
+
+    # When curation is active, do not leak excluded content via raw extracted text
+    prompt_extracted_text = "" if has_curation else (resume.extracted_text or "")
 
     # --- Provider (fail gracefully if not configured) ------------------------
     settings = get_settings()
@@ -225,8 +273,8 @@ def tailor_resume(
         raise HTTPException(status_code=503, detail="AI service is not configured. Please try again later.")
 
     tailoring_input = TailoringInput(
-        resume=resume.parsed_data or {},
-        extracted_text=resume.extracted_text or "",
+        resume=curated_parsed,
+        extracted_text=prompt_extracted_text,
         job=job,
         analysis=grounding,
     )
@@ -257,6 +305,63 @@ def tailor_resume(
     except Exception:  # noqa: BLE001 - never leak internal/provider details
         logger.exception("Unexpected error during AI tailoring")
         raise HTTPException(status_code=500, detail="Unexpected error during resume tailoring.")
+
+    # --- Post-generation guarantee: strict deterministic source identity -----
+    if body.selected_experience_indices is not None:
+        curated_exps = curated_parsed.get("experience") or []
+        if not curated_exps:
+            result["experience"] = []
+        else:
+            filtered_exp = []
+            for exp in (result.get("experience") or []):
+                g_title = (exp.get("original_title") or "").strip().lower()
+                g_comp = (exp.get("company") or "").strip().lower()
+                if not g_title:
+                    continue
+
+                # Match against curated source experiences with exact normalized identity.
+                # Do NOT accept broad substring matches or company-only matches.
+                matched = False
+                for s in curated_exps:
+                    s_title = (s.get("job_title") or s.get("title") or s.get("role") or "").strip().lower()
+                    s_comp = (s.get("company") or s.get("employer") or "").strip().lower()
+                    if s_title and g_title == s_title:
+                        # If both specify company, require exact company match as well
+                        if s_comp and g_comp:
+                            if s_comp == g_comp:
+                                matched = True
+                                break
+                        else:
+                            matched = True
+                            break
+                if matched:
+                    filtered_exp.append(exp)
+            result["experience"] = filtered_exp
+
+    if body.selected_project_indices is not None:
+        curated_projs = curated_parsed.get("projects") or []
+        if not curated_projs:
+            result["projects"] = []
+        else:
+            filtered_proj = []
+            for proj in (result.get("projects") or []):
+                g_name = (proj.get("name") or "").strip().lower()
+                if not g_name:
+                    continue
+
+                # Require exact normalized project-name match against a curated source project.
+                matched = False
+                for p in curated_projs:
+                    s_name = (p.get("name") or p.get("title") or "").strip().lower()
+                    if s_name and g_name == s_name:
+                        matched = True
+                        break
+                if matched:
+                    filtered_proj.append(proj)
+            result["projects"] = filtered_proj
+
+    if has_curation:
+        result["_curated_source"] = curated_parsed
 
     # --- Persist the tailored result -----------------------------------------
     # Reuse the existing row on regenerate (avoid uncontrolled duplicates); the
@@ -336,7 +441,7 @@ def list_tailored_resumes(
                 job_company=(j.company if j else "") or "",
                 source_resume_id=t.source_resume_id,
                 source_resume_name=(src.original_filename if src else "") or "",
-                original_content=_original_content_view(src) if src else {},
+                original_content=_original_content_view(src, t.structured_data) if (src or (t.structured_data and isinstance(t.structured_data, dict) and t.structured_data.get("_curated_source"))) else {},
                 tailored_content=summarise_for_response(t.structured_data or {}),
                 changes=t.changes or [],
                 supported_keywords_added=t.supported_keywords_added or [],
