@@ -131,6 +131,18 @@ well-documented commit, together with the deliberate Resume Parsing 2.0 change.
 The guard therefore never blocks forever - it forces a conscious, reviewed
 action instead of a silent inclusion.
 
+Corrective-restoration exception: a commit that deliberately restores a
+protected file to its pinned baseline (never arbitrary edits) can be authorized
+in the narrow `AUTHORIZED_PROTECTED_COMMITS` allow-list in
+`scripts/check_ci_scope.sh` without touching `PROTECTED_FILES`. The exception
+is SHA-bound to the specific restoration commit and additionally requires the
+file's committed HEAD blob to equal the baseline pinned in
+`PROTECTED_HEAD_BLOBS` (kept in sync with `release_smoke.py`
+`PROTECTED_FILES_AT_HEAD`). Full list still protected - the path is never
+removed; the exception exists to unblock CI after a protected file was
+inadvertently altered, so the corrective commit restoring the baseline can
+land.
+
 ## 7. Secret / configuration scanning
 
 `scripts/scan_repo_secrets.py` (stdlib-only Python) scans the working tree for
