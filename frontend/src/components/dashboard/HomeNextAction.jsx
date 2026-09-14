@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Sparkles, Upload, Calendar, Compass, ArrowRight } from "lucide-react";
+import { Sparkles, Upload, Calendar, Compass, ArrowRight, RefreshCw } from "lucide-react";
 
 export default function HomeNextAction({ action }) {
   if (!action) return null;
@@ -12,6 +12,8 @@ export default function HomeNextAction({ action }) {
         return <Calendar size={18} aria-hidden="true" />;
       case "sparkles":
         return <Sparkles size={18} aria-hidden="true" />;
+      case "refresh":
+        return <RefreshCw size={18} aria-hidden="true" />;
       default:
         return <Compass size={18} aria-hidden="true" />;
     }

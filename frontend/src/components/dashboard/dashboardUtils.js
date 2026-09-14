@@ -58,7 +58,23 @@ export function determineNextAction({
     };
   }
 
-  // 3. Upcoming Interview: Check interviews array
+  // 3. Setup: Has resume but no profile skills -> encourage Profile sync
+  if (hasResumes && !hasProfileSkills) {
+    return {
+      type: "sync_resume_profile",
+      eyebrow: "Sync Profile from Resume",
+      title: "Sync your parsed resume to your profile",
+      description: "Transfer your parsed skills, experience, and education to your profile to activate accurate job matching.",
+      ctaLabel: "Sync to Profile",
+      ctaLink: "/resumes",
+      ctaIcon: "refresh",
+      secondaryLabel: "View Profile",
+      secondaryLink: "/profile",
+      variant: "accent",
+    };
+  }
+
+  // 4. Upcoming Interview: Check interviews array
   if (Array.isArray(interviews) && interviews.length > 0) {
     const now = Date.now();
     // Find scheduled interview occurring in the future (or today)

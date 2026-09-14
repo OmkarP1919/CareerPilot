@@ -83,6 +83,7 @@ export function useJobSearch() {
       if (!trimmedName) return false;
       try {
         const payload = buildDiscoveryPayload(criteria);
+        payload._remote_mode = criteria.remote || "";
         await api.createSavedSearch(trimmedName, payload);
         await loadSavedSearches();
         return true;

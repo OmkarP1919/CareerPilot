@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import ScoreBadge from "../ScoreBadge";
 import { ArrowLeft, MapPin, Briefcase, Clock, DollarSign } from "lucide-react";
+import { formatWorkMode } from "../jobs/jobUtils";
 
 export default function JobHeroHeader({ job, score }) {
   const matchTier =
@@ -45,8 +46,8 @@ export default function JobHeroHeader({ job, score }) {
           <h1 className="job-hero-title">{job.title}</h1>
 
           <div className="job-hero-meta">
-            {job.work_mode && job.work_mode !== "unspecified" && (
-              <span className="job-meta-pill work-mode">{job.work_mode}</span>
+            {formatWorkMode(job.work_mode) && (
+              <span className="job-meta-pill work-mode">{formatWorkMode(job.work_mode)}</span>
             )}
             {job.employment_type && (
               <span className="job-meta-pill">

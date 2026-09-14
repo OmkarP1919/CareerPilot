@@ -8,7 +8,7 @@ import JobFilterDrawer from "../components/jobs/JobFilterDrawer";
 import JobCard from "../components/jobs/JobCard";
 import JobFeedHeader from "../components/jobs/JobFeedHeader";
 import AddJobModal from "../components/jobs/AddJobModal";
-import { normalizeJob } from "../components/jobs/jobUtils";
+import { normalizeJob, normalizeWorkMode } from "../components/jobs/jobUtils";
 import { SkeletonCard } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { Sparkles, Compass, Search, Plus } from "lucide-react";
@@ -179,12 +179,13 @@ export default function JobsPage() {
       // false); the authoritative exact filter runs here against the hit's
       // canonical work_mode so "Remote" shows only remote, "Hybrid" only
       // hybrid, and "Onsite" only onsite — never a silent no-op.
-      if (remote === "Remote") {
-        normalized = normalized.filter((j) => j.work_mode === "remote");
-      } else if (remote === "Hybrid") {
-        normalized = normalized.filter((j) => j.work_mode === "hybrid");
-      } else if (remote === "Onsite") {
-        normalized = normalized.filter((j) => j.work_mode === "onsite");
+      const canonicalFilter = normalizeWorkMode(remote);
+      if (canonicalFilter === "remote") {
+        normalized = normalized.filter((j) => normalizeWorkMode(j.work_mode, j.location) === "remote");
+      } else if (canonicalFilter === "hybrid") {
+        normalized = normalized.filter((j) => normalizeWorkMode(j.work_mode, j.location) === "hybrid");
+      } else if (canonicalFilter === "onsite") {
+        normalized = normalized.filter((j) => normalizeWorkMode(j.work_mode, j.location) === "onsite");
       }
 
       setFeedJobs(normalized);
@@ -327,9 +328,29 @@ export default function JobsPage() {
     try {
       const res = await handleRunSaved(savedSearch.id);
       const hits = Array.isArray(res?.report?.results) ? res.report.results : [];
-      const normalized = hits
+      let normalized = hits
         .map((hit) => normalizeJob(hit, sessionCacheRef.current))
         .filter(Boolean);
+
+      // Replay exact work-mode filtering consistent with discovery filter contract.
+      // Prefer preserved UI mode (_remote_mode); safely fall back to legacy boolean remote if absent.
+      let canonicalFilter = null;
+      if (savedSearch?.criteria?._remote_mode !== undefined) {
+        const raw = savedSearch.criteria._remote_mode;
+        if (raw) canonicalFilter = normalizeWorkMode(raw);
+      } else if (savedSearch?.criteria?.remote !== undefined && savedSearch.criteria.remote !== null) {
+        // Legacy fallback for saved searches created before _remote_mode preservation
+        canonicalFilter = normalizeWorkMode(savedSearch.criteria.remote);
+      }
+
+      if (canonicalFilter === "remote") {
+        normalized = normalized.filter((j) => normalizeWorkMode(j.work_mode, j.location) === "remote");
+      } else if (canonicalFilter === "hybrid") {
+        normalized = normalized.filter((j) => normalizeWorkMode(j.work_mode, j.location) === "hybrid");
+      } else if (canonicalFilter === "onsite") {
+        normalized = normalized.filter((j) => normalizeWorkMode(j.work_mode, j.location) === "onsite");
+      }
+
       setFeedJobs(normalized);
       notify(`Loaded saved search "${savedSearch.name}".`);
     } catch {

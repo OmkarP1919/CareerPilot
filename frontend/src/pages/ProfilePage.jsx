@@ -4,6 +4,7 @@ import { api } from "../services/api";
 import { SkeletonCard } from "../components/Skeleton";
 import ProfileRecordModal from "../components/profile/ProfileRecordModal";
 import ProfileResumeSyncModal from "../components/profile/ProfileResumeSyncModal";
+import ConfirmDialog from "../components/ConfirmDialog";
 import SkillAutocomplete from "../components/profile/SkillAutocomplete";
 import {
   buildResumeProfileDiff,
@@ -60,6 +61,15 @@ export default function ProfilePage() {
     type: null,
     initialData: null,
   });
+
+  // Record deletion confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    isOpen: false,
+    type: null,
+    id: null,
+    title: "",
+  });
+  const [deletingRecord, setDeletingRecord] = useState(false);
 
   const notify = (msg, type = "success") => {
     setNotification({ msg, type });
@@ -263,7 +273,25 @@ export default function ProfilePage() {
     }
   };
 
-  const handleDeleteRecord = async (type, id) => {
+  const promptDeleteRecord = (type, id, title) => {
+    setDeleteConfirm({
+      isOpen: true,
+      type,
+      id,
+      title: title || `this ${type}`,
+    });
+  };
+
+  const handleCancelDelete = () => {
+    if (!deletingRecord) {
+      setDeleteConfirm({ isOpen: false, type: null, id: null, title: "" });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    const { type, id } = deleteConfirm;
+    if (!type || !id || deletingRecord) return;
+    setDeletingRecord(true);
     try {
       if (type === "experience") {
         await api.delete(`/profile/experiences/${id}`);
@@ -294,8 +322,11 @@ export default function ProfilePage() {
         }));
         notify("Certification deleted.");
       }
+      setDeleteConfirm({ isOpen: false, type: null, id: null, title: "" });
     } catch {
       notify(`Failed to delete ${type}`, "error");
+    } finally {
+      setDeletingRecord(false);
     }
   };
 
@@ -577,7 +608,7 @@ export default function ProfilePage() {
                       <button
                         type="button"
                         className="btn btn-ghost btn-icon btn-sm btn-danger"
-                        onClick={() => handleDeleteRecord("experience", exp.id)}
+                        onClick={() => promptDeleteRecord("experience", exp.id, exp.role ? `${exp.role}${exp.company ? ` at ${exp.company}` : ""}` : "experience")}
                         title="Delete Experience"
                         aria-label={`Delete ${exp.role} at ${exp.company}`}
                       >
@@ -651,7 +682,7 @@ export default function ProfilePage() {
                       <button
                         type="button"
                         className="btn btn-ghost btn-icon btn-sm btn-danger"
-                        onClick={() => handleDeleteRecord("project", proj.id)}
+                        onClick={() => promptDeleteRecord("project", proj.id, proj.name || "project")}
                         title="Delete Project"
                         aria-label={`Delete ${proj.name}`}
                       >
@@ -751,7 +782,7 @@ export default function ProfilePage() {
                       <button
                         type="button"
                         className="btn btn-ghost btn-icon btn-sm btn-danger"
-                        onClick={() => handleDeleteRecord("education", edu.id)}
+                        onClick={() => promptDeleteRecord("education", edu.id, edu.degree ? `${edu.degree}${edu.college ? ` from ${edu.college}` : ""}` : "education")}
                         title="Delete Education"
                         aria-label={`Delete ${edu.degree}`}
                       >
@@ -819,7 +850,7 @@ export default function ProfilePage() {
                       <button
                         type="button"
                         className="btn btn-ghost btn-icon btn-sm btn-danger"
-                        onClick={() => handleDeleteRecord("certification", cert.id)}
+                        onClick={() => promptDeleteRecord("certification", cert.id, cert.name || "certification")}
                         title="Delete Certification"
                         aria-label={`Delete ${cert.name}`}
                       >
@@ -869,6 +900,18 @@ export default function ProfilePage() {
         type={recordModalConfig.type}
         initialData={recordModalConfig.initialData}
         onSave={handleSaveRecord}
+      />
+
+      {/* 3. Record Deletion Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        title={`Delete ${deleteConfirm.type ? deleteConfirm.type.charAt(0).toUpperCase() + deleteConfirm.type.slice(1) : "Record"}`}
+        message={`Are you sure you want to delete "${deleteConfirm.title}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        loading={deletingRecord}
       />
     </div>
   );

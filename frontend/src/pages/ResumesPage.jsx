@@ -5,6 +5,11 @@ import EmptyState from "../components/EmptyState";
 import Modal from "../components/Modal";
 import TailoredResult from "../components/TailoredResult";
 import CoverLetterModal from "../components/CoverLetterModal";
+import ProfileResumeSyncModal from "../components/profile/ProfileResumeSyncModal";
+import {
+  buildResumeProfileDiff,
+  applyResumeProfileSync,
+} from "../components/profile/profileAutofillUtils";
 import { SkeletonCard } from "../components/Skeleton";
 import {
   FileText,
@@ -14,6 +19,7 @@ import {
   AlertCircle,
   FileDown,
   Eye,
+  RefreshCw,
 } from "lucide-react";
 
 export default function ResumesPage() {
@@ -40,6 +46,12 @@ export default function ResumesPage() {
   const [coverLetters, setCoverLetters] = useState([]);
   const [coverLoading, setCoverLoading] = useState(true);
   const [viewCover, setViewCover] = useState(null);
+
+  // Resume -> Profile sync state
+  const [syncResumeTarget, setSyncResumeTarget] = useState(null);
+  const [syncDiff, setSyncDiff] = useState(null);
+  const [syncLoadingId, setSyncLoadingId] = useState(null);
+  const [syncProfileData, setSyncProfileData] = useState(null);
 
   const notify = (msg, type = "success") => {
     setNotification({ msg, type });
@@ -137,6 +149,71 @@ export default function ResumesPage() {
       setInsightsError("Could not retrieve parsed resume insights.");
     } finally {
       setInsightsLoading(false);
+    }
+  };
+
+  const handleInitiateSync = async (resume) => {
+    if (!resume) return;
+    setSyncLoadingId(resume.id);
+    try {
+      // 1. Obtain parsed resume data
+      let parsedData = null;
+      if (resume.parsed_data && typeof resume.parsed_data === "object" && Object.keys(resume.parsed_data).length > 0) {
+        parsedData = resume.parsed_data;
+      } else {
+        const parsedRes = await api.get(`/resumes/${resume.id}/parsed`).catch(() => null);
+        const extracted =
+          parsedRes && !Array.isArray(parsedRes) && parsedRes.data && typeof parsedRes.data === "object"
+            ? parsedRes.data
+            : parsedRes;
+        if (extracted && typeof extracted === "object" && Object.keys(extracted).length > 0) {
+          parsedData = extracted;
+        }
+      }
+
+      if (!parsedData) {
+        notify("Could not retrieve parsed data for this resume.", "error");
+        return;
+      }
+
+      // 2. Obtain current profile
+      let currentProfile = null;
+      try {
+        currentProfile = await api.get("/profile");
+      } catch {
+        notify("Failed to load your profile. Please check your connection.", "error");
+        return;
+      }
+
+      // 3. Build diff using canonical utility
+      const diff = buildResumeProfileDiff(parsedData, currentProfile);
+      setSyncResumeTarget(resume);
+      setSyncProfileData(currentProfile);
+      setSyncDiff(diff);
+    } catch {
+      notify("Failed to prepare resume sync.", "error");
+    } finally {
+      setSyncLoadingId(null);
+    }
+  };
+
+  const handleConfirmSync = async () => {
+    if (!syncDiff || !syncResumeTarget) return;
+    try {
+      const result = await applyResumeProfileSync(syncDiff, api, syncProfileData);
+      if (result.count > 0) {
+        if (result.errors?.length > 0) {
+          notify(`Synced ${result.count} items with some warnings: ${result.errors[0]}`, "warn");
+        } else {
+          notify(`Successfully synced ${result.count} items from ${syncResumeTarget.filename} to your profile!`);
+        }
+      } else if (result.errors?.length > 0) {
+        notify(`Sync encountered errors: ${result.errors[0]}`, "error");
+      } else {
+        notify("Profile is already up to date with this resume.");
+      }
+    } catch {
+      notify("An unexpected error occurred during sync.", "error");
     }
   };
 
@@ -344,6 +421,17 @@ export default function ResumesPage() {
 
                     <button
                       type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => handleInitiateSync(r)}
+                      disabled={!isParsed || syncLoadingId === r.id}
+                      title="Sync parsed resume to profile"
+                    >
+                      <RefreshCw size={14} className={syncLoadingId === r.id ? "animate-spin" : ""} />
+                      <span>{syncLoadingId === r.id ? "Checking..." : "Sync to Profile"}</span>
+                    </button>
+
+                    <button
+                      type="button"
                       className="btn btn-ghost btn-icon btn-sm text-danger"
                       onClick={() => handleDeleteResume(r.id)}
                       title="Delete Resume"
@@ -533,6 +621,14 @@ export default function ResumesPage() {
                 </div>
               </div>
 
+              {/* Summary section (additive) */}
+              {insightsParsed.summary && (
+                <div className="insights-section">
+                  <h4>{t("resume.professionalSummary", "Professional Summary")}</h4>
+                  <p className="text-sm text-secondary">{insightsParsed.summary}</p>
+                </div>
+              )}
+
               {/* Skills section */}
               {insightsParsed.skills?.length > 0 && (
                 <div className="insights-section">
@@ -596,6 +692,7 @@ export default function ResumesPage() {
                     {insightsParsed.projects.map((p, i) => (
                       <div key={i} className="insight-proj-item">
                         <strong>{p.name || p.title || "Project"}</strong>
+                        {p.dates && <span className="text-xs text-muted"> · {p.dates}</span>}
                         {p.technologies && <span className="text-xs text-muted">{Array.isArray(p.technologies) ? p.technologies.join(", ") : p.technologies}</span>}
                         {p.description && <p className="text-sm text-secondary">{p.description}</p>}
                       </div>
@@ -604,7 +701,19 @@ export default function ResumesPage() {
                 </div>
               )}
 
-              <div className="modal-footer" style={{ marginTop: "var(--space-6)" }}>
+              {/* Certifications section (additive) */}
+              {(insightsParsed.certifications?.length > 0) && (
+                <div className="insights-section">
+                  <h4>{t("resume.certifications", "Certifications")}</h4>
+                  <div className="skills-chips-wrap" style={{ marginTop: "var(--space-2)" }}>
+                    {insightsParsed.certifications.map((c, i) => (
+                      <span key={i} className="skill-chip match">{c}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="modal-footer" style={{ marginTop: "var(--space-6)", display: "flex", justifyContent: "flex-end", gap: "var(--space-2)" }}>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
@@ -612,11 +721,37 @@ export default function ResumesPage() {
                 >
                   Close
                 </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    const target = insightsResume;
+                    setInsightsResume(null);
+                    handleInitiateSync(target);
+                  }}
+                  disabled={syncLoadingId === insightsResume?.id}
+                >
+                  <RefreshCw size={14} className={syncLoadingId === insightsResume?.id ? "animate-spin" : ""} />
+                  <span>Sync to Profile</span>
+                </button>
               </div>
             </div>
           ) : null}
         </Modal>
       )}
+
+      {/* Resume -> Profile Sync Confirmation Dialog */}
+      <ProfileResumeSyncModal
+        isOpen={Boolean(syncResumeTarget && syncDiff)}
+        onClose={() => {
+          setSyncResumeTarget(null);
+          setSyncDiff(null);
+          setSyncProfileData(null);
+        }}
+        diff={syncDiff}
+        resumeName={syncResumeTarget?.filename || "Resume"}
+        onConfirmSync={handleConfirmSync}
+      />
     </div>
   );
 }

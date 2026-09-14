@@ -86,6 +86,43 @@ export function toCanonicalExperienceLevel(value) {
 }
 
 /**
+ * Normalizes any raw work mode or location string to a canonical internal value:
+ * 'remote' | 'hybrid' | 'onsite' | 'unspecified'
+ */
+export function normalizeWorkMode(rawVal, location = "") {
+  const val = (rawVal != null ? String(rawVal) : "").trim().toLowerCase();
+  if (val === "remote" || val === "true") return "remote";
+  if (val === "hybrid") return "hybrid";
+  if (val === "onsite" || val === "on-site" || val === "in-office" || val === "office" || val === "false") return "onsite";
+  if (val === "unspecified") return "unspecified";
+
+  const loc = (location || "").toString().trim().toLowerCase();
+  if (loc.includes("remote")) return "remote";
+  if (loc.includes("hybrid")) return "hybrid";
+  if (loc.includes("onsite") || loc.includes("on-site") || loc.includes("in-office")) return "onsite";
+
+  return "unspecified";
+}
+
+/**
+ * Returns a user-friendly display label for a work mode:
+ * 'Remote' | 'Hybrid' | 'Onsite' | ''
+ */
+export function formatWorkMode(workMode) {
+  const canonical = normalizeWorkMode(workMode);
+  switch (canonical) {
+    case "remote":
+      return "Remote";
+    case "hybrid":
+      return "Hybrid";
+    case "onsite":
+      return "Onsite";
+    default:
+      return "";
+  }
+}
+
+/**
  * Builds discovery filtered search request payload from filter criteria.
  *
  * employment_type / experience_level are sent in canonical backend form so the
@@ -100,13 +137,18 @@ export function buildDiscoveryPayload(criteria = {}) {
   const employmentType = toCanonicalEmploymentType(criteria.type);
   const experienceLevel = toCanonicalExperienceLevel(criteria.level);
 
+  const rawRemote = (criteria.remote || "").toString().trim().toLowerCase();
+  const isRemote = rawRemote === "remote" || rawRemote === "true";
+  const isHybrid = rawRemote === "hybrid";
+  const isOnsite = rawRemote === "onsite" || rawRemote === "false";
+
   const payload = {
     queries: query ? [query] : [],
     locations: location ? [location] : [],
     remote:
-      criteria.remote === "Remote" || criteria.remote === "Hybrid"
+      isRemote || isHybrid
         ? true
-        : criteria.remote === "Onsite"
+        : isOnsite
         ? false
         : null,
     salary_min: criteria.smin ? Number(criteria.smin) : criteria.salary_min ? Number(criteria.salary_min) : null,
@@ -159,7 +201,7 @@ export function normalizeJob(item, sessionCache = new Map()) {
       title: item.title || "Untitled Role",
       company: item.company || "Company",
       location: item.location || "",
-      work_mode: (item.work_mode && item.work_mode !== "unspecified") ? item.work_mode : "",
+      work_mode: normalizeWorkMode(item.work_mode, item.location),
       employment_type: item.employment_type || "",
       experience_level: item.experience_level || "",
       description: item.description || "",
@@ -208,7 +250,7 @@ export function normalizeJob(item, sessionCache = new Map()) {
     title: jobObj.title || "Untitled Role",
     company: jobObj.company || "Company",
     location: jobObj.location || "",
-    work_mode: jobObj.location?.toLowerCase().includes("remote") ? "Remote" : (jobObj.work_mode || ""),
+    work_mode: normalizeWorkMode(jobObj.work_mode, jobObj.location),
     employment_type: jobObj.employment_type || "",
     experience_level: jobObj.experience_level || "",
     description: jobObj.description || "",

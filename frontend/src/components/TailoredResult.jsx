@@ -112,9 +112,6 @@ export default function TailoredResult({
                   Profile Match Score
                 </span>
                 <ScoreBadge score={baselineScore} size="large" />
-                <span className="text-xs text-muted" style={{ display: "block", marginTop: "4px", maxWidth: "200px" }}>
-                  (Tailored ATS score requires backend enhancement)
-                </span>
               </div>
             ) : (
               <div
@@ -303,24 +300,60 @@ export default function TailoredResult({
                 <div className="stack" style={{ gap: "var(--space-4)" }}>
                   {tailoredContent.experience.map((exp, i) => {
                     const origExp = originalContent.experience?.[i];
+                    const expTitle = exp.original_title || exp.title || exp.role || origExp?.title || origExp?.role || "Role";
+                    const origBullets = Array.isArray(exp.original_bullets) && exp.original_bullets.length > 0
+                      ? exp.original_bullets
+                      : Array.isArray(origExp?.bullets) && origExp.bullets.length > 0
+                      ? origExp.bullets
+                      : null;
+                    const tailoredBullets = Array.isArray(exp.tailored_bullets) && exp.tailored_bullets.length > 0
+                      ? exp.tailored_bullets
+                      : Array.isArray(exp.bullets) && exp.bullets.length > 0
+                      ? exp.bullets
+                      : null;
+
                     return (
                       <div key={i} className="comparison-item-box">
                         <div className="comparison-item-head">
-                          <strong>{exp.title || exp.role}</strong>
-                          {exp.company && <span className="text-muted">· {exp.company}</span>}
+                          <strong>{expTitle}</strong>
+                          {exp.company && <span className="text-muted"> · {exp.company}</span>}
                         </div>
                         <div className="comparison-side-grid" style={{ marginTop: "var(--space-2)" }}>
                           <div className="comparison-side original">
                             <span className="comparison-side-label">Original</span>
-                            <p className="comparison-text">
-                              {origExp?.description || "Original experience bullet"}
-                            </p>
+                            {origBullets ? (
+                              <ul className="comparison-bullets">
+                                {origBullets.map((bullet, bi) => (
+                                  <li key={bi}>{bullet}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="comparison-text">
+                                {origExp?.description || (typeof exp.original_bullets === "string" ? exp.original_bullets : "Original experience not provided")}
+                              </p>
+                            )}
                           </div>
                           <div className="comparison-side tailored">
                             <span className="comparison-side-label">Tailored</span>
-                            <p className="comparison-text">{exp.description}</p>
+                            {tailoredBullets ? (
+                              <ul className="comparison-bullets">
+                                {tailoredBullets.map((bullet, bi) => (
+                                  <li key={bi}>{bullet}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="comparison-text">
+                                {exp.description || (typeof exp.tailored_bullets === "string" ? exp.tailored_bullets : "Tailored experience not available")}
+                              </p>
+                            )}
                           </div>
                         </div>
+                        {Array.isArray(exp.changes) && exp.changes.length > 0 && (
+                          <div className="comparison-item-changes" style={{ marginTop: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
+                            <strong style={{ color: "var(--text-primary)" }}>Key Changes: </strong>
+                            <span>{exp.changes.join(" · ")}</span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

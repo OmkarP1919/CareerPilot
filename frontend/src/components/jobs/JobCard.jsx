@@ -1,5 +1,6 @@
 import { Bookmark, BookmarkCheck, ArrowRight, Loader2, Sparkles, CheckCircle2, Clock, Building2, MapPin } from "lucide-react";
 import ScoreBadge from "../ScoreBadge";
+import { formatWorkMode } from "./jobUtils";
 
 export default function JobCard({
   job,
@@ -91,10 +92,10 @@ export default function JobCard({
                 </>
               )}
 
-              {work_mode && work_mode !== "unspecified" && (
+              {formatWorkMode(work_mode) && (
                 <>
                   <span className="meta-sep" aria-hidden="true">•</span>
-                  <span className="job-work-mode">{work_mode}</span>
+                  <span className="job-work-mode">{formatWorkMode(work_mode)}</span>
                 </>
               )}
 

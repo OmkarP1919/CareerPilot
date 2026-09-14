@@ -12,6 +12,7 @@ import {
   Layers,
   FileText,
   User,
+  TrendingUp,
   Settings,
   LogOut,
   Sun,
@@ -45,6 +46,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   // Secondary Navigation Items
   const secondaryNavItems = [
     { to: "/profile", label: t("nav.profile", "Profile"), icon: User },
+    { to: "/insights", label: t("nav.insights", "Insights"), icon: TrendingUp },
     { to: "/settings", label: t("nav.settings", "Settings"), icon: Settings },
   ];
 
@@ -116,6 +118,9 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
     }
     if (to === "/profile") {
       return currentPath.startsWith("/profile");
+    }
+    if (to === "/insights") {
+      return currentPath.startsWith("/insights");
     }
     if (to === "/settings") {
       return currentPath.startsWith("/settings");
