@@ -191,6 +191,7 @@ assert.ok(fs.existsSync(autofillUtilsPath), "profileAutofillUtils.js must exist"
 const {
   buildResumeProfileDiff,
   applyResumeProfileSync,
+  filterProfileDiff,
   formatTechnologies,
   normalizeTechnologies,
 } = await import(`file://${autofillUtilsPath}`);
@@ -451,6 +452,175 @@ for (const pattern of forbiddenTrimPatterns) {
 }
 
 console.log("  ok   3. Resume autofill diff, deduplication, and technologies normalization verified");
+
+// -----------------------------------------------------------------------------
+// 3.6 Fill Profile from Resume Feature Contract
+// -----------------------------------------------------------------------------
+const fillModalPath = path.join(
+  ROOT,
+  "src",
+  "components",
+  "profile",
+  "FillProfileFromResumeModal.jsx"
+);
+assert.ok(fs.existsSync(fillModalPath), "FillProfileFromResumeModal.jsx must exist");
+const fillSrc = fs.readFileSync(fillModalPath, "utf8");
+const pagesCssSrc = fs.readFileSync(path.join(ROOT, "src", "styles", "pages.css"), "utf8");
+
+// a. Action exists in Profile page and opens the flow directly
+assert.ok(
+  profileSrc.includes("FillProfileFromResumeModal"),
+  "ProfilePage must import FillProfileFromResumeModal"
+);
+assert.ok(
+  profileSrc.includes("showFillModal"),
+  "ProfilePage must manage showFillModal state"
+);
+assert.ok(
+  profileSrc.includes("Fill Profile from Resume"),
+  "ProfilePage must render a 'Fill Profile from Resume' action"
+);
+assert.ok(
+  profileSrc.includes("onClick={() => setShowFillModal(true)}"),
+  "Fill action must open the flow directly without requiring a saved resume"
+);
+
+// b. Available on desktop and mobile (short label handled by CSS, no JS gating)
+assert.ok(
+  profileSrc.includes("Fill from Resume"),
+  "Mobile short label 'Fill from Resume' must exist"
+);
+assert.ok(
+  pagesCssSrc.includes(".fill-btn-label-short"),
+  "pages.css must provide the responsive short label for mobile"
+);
+
+// c. Reuses existing parsing infrastructure
+assert.ok(
+  fillSrc.includes('api.uploadFile("/resumes"'),
+  "Fill flow must upload via the existing POST /resumes endpoint"
+);
+assert.ok(
+  fillSrc.includes("/parsed"),
+  "Fill flow must read parsed data via the existing /resumes/{id}/parsed endpoint"
+);
+assert.ok(
+  fillSrc.includes('api.delete(`/resumes/${resumeId}`)'),
+  "Fill flow must clean up the temporary resume record via DELETE /resumes/{id}"
+);
+
+// d. Passes parsed data through the existing mapping
+assert.ok(
+  fillSrc.includes("buildResumeProfileDiff"),
+  "Fill flow must reuse buildResumeProfileDiff"
+);
+assert.ok(
+  fillSrc.includes("applyResumeProfileSync"),
+  "Fill flow must reuse applyResumeProfileSync for safe merging"
+);
+assert.ok(
+  fillSrc.includes("filterProfileDiff"),
+  "Fill flow must support selective import via filterProfileDiff"
+);
+
+// e. Selective import: deselected categories must never be applied
+const fullFiltered = filterProfileDiff(diff, Object.keys(diff.counts));
+assert.strictEqual(
+  fullFiltered.totalItems,
+  diff.totalItems,
+  "Selecting every category must keep all items"
+);
+
+const skillsOnly = filterProfileDiff(diff, ["skills"]);
+assert.strictEqual(skillsOnly.counts.skills, diff.counts.skills, "Selected category count must be preserved");
+assert.strictEqual(skillsOnly.counts.experiences, 0, "Deselected experiences must be excluded");
+assert.strictEqual(skillsOnly.counts.projects, 0, "Deselected projects must be excluded");
+assert.strictEqual(skillsOnly.counts.education, 0, "Deselected education must be excluded");
+assert.strictEqual(skillsOnly.counts.certifications, 0, "Deselected certifications must be excluded");
+assert.strictEqual(skillsOnly.counts.location, 0, "Deselected location must be excluded");
+assert.deepStrictEqual(skillsOnly.toAdd.experiences, [], "Deselected experience items must be emptied");
+assert.strictEqual(
+  skillsOnly.totalItems,
+  diff.counts.skills,
+  "totalItems must reflect only the selected categories"
+);
+
+const onlySkillsPosts = [];
+const mockApiOnlySkills = {
+  post: async (endpoint, data) => {
+    onlySkillsPosts.push(endpoint);
+    return data;
+  },
+  put: async () => ({}),
+};
+await applyResumeProfileSync(skillsOnly, mockApiOnlySkills, mockExistingProfile);
+assert.ok(
+  onlySkillsPosts.every((ep) => ep === "/profile/skills"),
+  "applyResumeProfileSync must only touch selected categories"
+);
+assert.strictEqual(onlySkillsPosts.length, skillsOnly.counts.skills, "One skill POST per selected skill");
+
+const emptyFiltered = filterProfileDiff(diff, []);
+assert.strictEqual(emptyFiltered.hasChanges, false, "Empty selection must yield hasChanges false");
+assert.strictEqual(emptyFiltered.totalItems, 0, "Empty selection must yield 0 items");
+
+// f. Fills only empty scalar fields (location) and preserves existing data
+const diffNoLocation = buildResumeProfileDiff(mockParsedResume, {
+  ...mockExistingProfile,
+  profile: { location: "" },
+});
+assert.strictEqual(
+  diffNoLocation.counts.location,
+  1,
+  "Empty profile location must be filled from resume"
+);
+assert.strictEqual(diffNoLocation.toAdd.location, "San Francisco, CA");
+const locationOnly = filterProfileDiff(diffNoLocation, ["location"]);
+assert.strictEqual(locationOnly.totalItems, 1, "Location-only selection must remain applicable");
+assert.strictEqual(locationOnly.toAdd.location, "San Francisco, CA");
+
+// g. Array technologies stay safe through filtering (regression for string[])
+const techFiltered = filterProfileDiff(diffDiverse, ["projects", "experiences"]);
+assert.strictEqual(
+  techFiltered.toAdd.projects[0].technologies,
+  "Python, FastAPI",
+  "Filtered diff must preserve normalized project technologies"
+);
+assert.deepStrictEqual(
+  techFiltered.toAdd.experiences[0].technologies,
+  ["TypeScript", "GraphQL"],
+  "Filtered diff must preserve experience tools arrays"
+);
+
+// h. Missing sections must never fabricate data
+const emptyResumeDiff = buildResumeProfileDiff(
+  { basic_info: {}, skills: [], education: [], experience: [], projects: [], certifications: [] },
+  {}
+);
+assert.strictEqual(emptyResumeDiff.hasChanges, false, "Empty parsed resume must produce no changes");
+assert.strictEqual(emptyResumeDiff.totalItems, 0, "Empty parsed resume must produce no items");
+
+// i. Upload, parser, and no-usable-info failures handled in the UI
+assert.ok(
+  fillSrc.includes("Failed to process the resume"),
+  "Fill flow must surface upload/parse failures with a retry path"
+);
+assert.ok(
+  fillSrc.includes("No usable information"),
+  "Fill flow must handle resumes with no extractable information"
+);
+
+// j. Existing saved-resume sync remains present and renamed
+assert.ok(
+  profileSrc.includes("Sync Saved Resume"),
+  "Existing saved-resume sync action must be renamed to 'Sync Saved Resume'"
+);
+assert.ok(
+  profileSrc.includes("ProfileResumeSyncModal"),
+  "Existing ProfileResumeSyncModal must remain integrated"
+);
+
+console.log("  ok   3.6. Fill Profile from Resume flow contract verified");
 
 // -----------------------------------------------------------------------------
 // 4. Settings Page Contract

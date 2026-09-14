@@ -5571,6 +5571,30 @@
   font-weight: var(--weight-medium);
 }
 
+.profile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.profile-header-fill-action {
+  flex-shrink: 0;
+}
+
+.profile-fill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  font-weight: var(--weight-medium);
+}
+
+.fill-btn-label-short {
+  display: none;
+}
+
 .profile-card {
   padding: var(--space-6);
   border-radius: var(--radius-xl);
@@ -5899,6 +5923,231 @@
   margin-top: var(--space-2);
 }
 
+/* Fill Profile from Resume Modal */
+.fill-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.fill-dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface-secondary);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-default),
+    background var(--duration-fast) var(--ease-default);
+}
+
+.fill-dropzone.dragging {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.fill-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.fill-dropzone-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+}
+
+.fill-dropzone-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.fill-dropzone-hint {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.fill-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--danger-light);
+  border: 1px solid var(--danger-border);
+  color: var(--danger-dark);
+  font-size: var(--text-sm);
+}
+
+.fill-spinner-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6) 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.fill-review-intro {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-secondary);
+  border: 1px solid var(--border);
+}
+
+.fill-category-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fill-category-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.fill-category-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.fill-category-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fill-category-name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.fill-category-count {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.fill-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-secondary);
+}
+
+.fill-preview-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.fill-preview-summary::-webkit-details-marker {
+  display: none;
+}
+
+.fill-preview-summary::before {
+  content: "";
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-tertiary);
+  border-bottom: 2px solid var(--text-tertiary);
+  transform: rotate(-45deg);
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.fill-preview[open] .fill-preview-summary::before {
+  transform: rotate(45deg);
+}
+
+.fill-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-3);
+}
+
+.fill-preview-location {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+.fill-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--success-light);
+  border: 1px solid var(--success-border);
+  text-align: center;
+}
+
+.fill-done.partial {
+  background: var(--danger-light);
+  border-color: var(--danger-border);
+}
+
+.fill-done-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+}
+
+.fill-done-subtext {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  max-width: 420px;
+}
+
+.fill-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
 .profile-record-form {
   display: flex;
   flex-direction: column;
@@ -6129,11 +6378,45 @@ html[data-theme="dark"] .toggle-switch-btn {
     gap: var(--space-3);
   }
 
+  .profile-header-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .profile-header-fill-action {
+    width: 100%;
+  }
+
+  .profile-fill-btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .fill-btn-label-long {
+    display: none;
+  }
+
+  .fill-btn-label-short {
+    display: inline;
+  }
+
   .profile-header-sync-action {
     width: 100%;
   }
 
   .profile-sync-btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .fill-actions {
+    flex-direction: column;
+  }
+
+  .fill-actions > button {
     width: 100%;
     min-height: 44px;
     justify-content: center;

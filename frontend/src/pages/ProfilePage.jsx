@@ -4,6 +4,7 @@ import { api } from "../services/api";
 import { SkeletonCard } from "../components/Skeleton";
 import ProfileRecordModal from "../components/profile/ProfileRecordModal";
 import ProfileResumeSyncModal from "../components/profile/ProfileResumeSyncModal";
+import FillProfileFromResumeModal from "../components/profile/FillProfileFromResumeModal";
 import SkillAutocomplete from "../components/profile/SkillAutocomplete";
 import {
   buildResumeProfileDiff,
@@ -27,6 +28,7 @@ import {
   FolderGit2,
   Calendar,
   RefreshCw,
+  Upload,
   AlertCircle,
 } from "lucide-react";
 
@@ -42,6 +44,9 @@ export default function ProfilePage() {
   const [parsedResumeData, setParsedResumeData] = useState(null);
   const [syncDiff, setSyncDiff] = useState(null);
   const [showSyncModal, setShowSyncModal] = useState(false);
+
+  // Fill Profile from Resume
+  const [showFillModal, setShowFillModal] = useState(false);
 
   // Career Goals inline editing
   const [editingGoals, setEditingGoals] = useState(false);
@@ -367,25 +372,39 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* 2. Prominent Sync from Resume Action */}
-        {parsedResumeData && (
-          <div className="profile-header-sync-action">
+        {/* 2. Prominent Fill Profile from Resume Action */}
+        <div className="profile-header-actions">
+          <div className="profile-header-fill-action">
             <button
               type="button"
-              className="btn btn-outline btn-sm profile-sync-btn"
-              onClick={() => setShowSyncModal(true)}
-              title="Sync skills and experience from your parsed resume"
+              className="btn btn-primary btn-sm profile-fill-btn"
+              onClick={() => setShowFillModal(true)}
+              title="Upload a resume and fill your profile from it"
             >
-              <RefreshCw size={15} aria-hidden="true" />
-              <span>Update from Resume</span>
-              {syncDiff?.hasChanges && (
-                <span className="badge badge-accent badge-sm" style={{ marginLeft: "4px" }}>
-                  {syncDiff.totalItems} new
-                </span>
-              )}
+              <Upload size={15} aria-hidden="true" />
+              <span className="fill-btn-label-long">Fill Profile from Resume</span>
+              <span className="fill-btn-label-short">Fill from Resume</span>
             </button>
           </div>
-        )}
+          {parsedResumeData && (
+            <div className="profile-header-sync-action">
+              <button
+                type="button"
+                className="btn btn-outline btn-sm profile-sync-btn"
+                onClick={() => setShowSyncModal(true)}
+                title="Sync skills and experience from your parsed resume"
+              >
+                <RefreshCw size={15} aria-hidden="true" />
+                <span>Sync Saved Resume</span>
+                {syncDiff?.hasChanges && (
+                  <span className="badge badge-accent badge-sm" style={{ marginLeft: "4px" }}>
+                    {syncDiff.totalItems} new
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {notification && (
@@ -853,6 +872,14 @@ export default function ProfilePage() {
       </section>
 
       {/* === Modals === */}
+      {/* 0. Fill Profile from Resume Dialog */}
+      <FillProfileFromResumeModal
+        isOpen={showFillModal}
+        onClose={() => setShowFillModal(false)}
+        profile={profile}
+        onApplied={fetchData}
+      />
+
       {/* 1. Resume Sync Confirmation Dialog */}
       <ProfileResumeSyncModal
         isOpen={showSyncModal}
