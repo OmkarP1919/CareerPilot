@@ -14,6 +14,8 @@ from app.services.job_discovery import (
 from app.services.job_sources.adzuna import AdzunaSource
 from app.services.job_sources.jobicy import JobicySource
 from app.services.job_sources.jooble import JoobleSource
+from app.services.job_sources.remoteok import RemoteOKSource
+from app.services.job_sources.remotive import RemotiveSource
 from app.services.job_sources.base import (
     NormalizedJob,
     SearchCriteria,
@@ -369,7 +371,13 @@ class PersonalizedDiscoveryService:
         )
 
         # Source orchestration with isolated exception handling
-        providers = [AdzunaSource(), JobicySource(), JoobleSource()]
+        providers = [
+            AdzunaSource(),
+            JobicySource(),
+            JoobleSource(),
+            RemoteOKSource(),
+            RemotiveSource(),
+        ]
         criteria = SearchCriteria(queries=queries, locations=location_terms, country=detected_country)
         orchestrator = DiscoveryOrchestrator(providers)
 

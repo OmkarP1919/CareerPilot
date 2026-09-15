@@ -53,6 +53,8 @@ from app.schemas.discovery import (
 from app.services.job_sources.adzuna import AdzunaSource
 from app.services.job_sources.jobicy import JobicySource
 from app.services.job_sources.jooble import JoobleSource
+from app.services.job_sources.remoteok import RemoteOKSource
+from app.services.job_sources.remotive import RemotiveSource
 from app.services.job_sources.base import (
     NormalizedJob,
     SearchCriteria,
@@ -71,6 +73,8 @@ SOURCE_BUILDERS: dict[str, callable] = {
     "Adzuna": lambda: AdzunaSource(),
     "Jobicy": lambda: JobicySource(),
     "Jooble": lambda: JoobleSource(),
+    "RemoteOK": lambda: RemoteOKSource(),
+    "Remotive": lambda: RemotiveSource(),
 }
 
 ALL_SOURCE_NAMES: list[str] = list(SOURCE_BUILDERS.keys())

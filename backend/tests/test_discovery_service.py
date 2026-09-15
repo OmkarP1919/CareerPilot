@@ -90,7 +90,7 @@ class SourceSelectionTest(unittest.TestCase):
     def test_default_all_sources(self):
         providers, names = ds.resolve_sources(None)
         self.assertEqual(names, ds.ALL_SOURCE_NAMES)
-        self.assertEqual(len(providers), 3)
+        self.assertEqual(len(providers), 5)
 
     def test_selected_sources(self):
         providers, names = ds.resolve_sources(["Jobicy"])
@@ -101,7 +101,8 @@ class SourceSelectionTest(unittest.TestCase):
         providers, names = ds.resolve_sources(["Nope", "AlsoNope"])
         # Nothing known selected -> fall back to all
         self.assertEqual(names, ds.ALL_SOURCE_NAMES)
-        self.assertEqual(len(providers), 3)
+        self.assertEqual(len(providers), 5)
+
 
 
 class BuildCriteriaTest(unittest.TestCase):

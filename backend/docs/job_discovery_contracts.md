@@ -54,6 +54,8 @@ Current honest capabilities:
 | Adzuna   | `supports_location`, `supports_pagination` |
 | Jobicy   | *(none — keyword/tag search only)* |
 | Jooble   | `supports_location` |
+| RemoteOK | *(none — keyword/tag search only)* |
+| Remotive | `supports_location` |
 
 Anything not listed above is `False` by design, even when the upstream API
 documents it, until an adapter actually passes it.
@@ -353,3 +355,31 @@ response level of a discovery run.
   provenance, source selection, criteria mapping, filtered search with ranking,
   freshness, saved-search CRUD, and new-result detection.
 * Existing 5B/5B.1 tests (pipeline, multi_source, personalized) remain green.
+
+## 10. Phase 7.0D.2 — Job Source Expansion
+
+Phase 7.0D.2 expands legitimate API-based job coverage, especially for India and global remote jobs:
+
+### 10.1 Adzuna India Support & Enrichment
+* Supported countries now include `"in"` (India).
+* `SearchCriteria.country` takes precedence over the environment default `ADZUNA_COUNTRY`.
+* Removed the silent HTTP error fallback to US results: when an India search fails upstream, it surfaces cleanly via `SourceStatus.UNAVAILABLE` and never silently substitutes US jobs.
+* Enriches `NormalizedJob` with `country`, upstream `remote` / `work_mode` boolean mappings, `salary_min`, `salary_max`, and `salary_currency` when provided.
+
+### 10.2 RemoteOK Provider
+* Public API: `GET https://remoteok.com/api` (no API key needed).
+* Remote-only jobs (`remote=True`, `work_mode="remote"`).
+* Query translation to tag-style filtering; unsupported filters are safely deferred to the canonical pipeline.
+* Strips HTML descriptions safely; sentinel salary 0 values are mapped to `None`.
+* Legal and attribution requirements: CareerPilot links back to the RemoteOK listing URL (`source_url`) and application target (`application_url`) and attributes RemoteOK as the source.
+
+### 10.3 Remotive Provider
+* Public API: `GET https://remotive.com/api/remote-jobs` (no API key needed).
+* Remote-only jobs (`remote=True`, `work_mode="remote"`).
+* Passes `search` and `location` parameters upstream where present.
+* Conservative salary parser for ranges (`$100k - $120k`, `$80,000 - $100,000`) and single amounts; never invents salary values.
+* **URL and Attribution rules**: Remotive's `url` is mapped strictly to `source_url` (never mislabeled as a direct `application_url`). Direct application URLs are populated only if an explicit apply field is returned upstream. CareerPilot attributes Remotive as the source. Remotive listings must not be republished to third-party job boards or placed behind signup walls.
+
+### 10.4 Deferred Providers
+* **Jooble India**: Deferred due to Jooble's region-specific API keys and lifetime 500-request quota limitations.
+* **Arbeitnow**: Deferred to a future release.

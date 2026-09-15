@@ -319,8 +319,14 @@ class TestRegistry(unittest.TestCase):
             )
             from app.services.job_sources.registry import get_providers, get_all_provider_names
             providers = get_providers()
-            self.assertEqual([p.name for p in providers], ["Adzuna", "Jobicy", "Jooble"])
-            self.assertEqual(get_all_provider_names(), ["Adzuna", "Jobicy", "Jooble"])
+            self.assertEqual(
+                [p.name for p in providers],
+                ["Adzuna", "Jobicy", "Jooble", "RemoteOK", "Remotive"],
+            )
+            self.assertEqual(
+                get_all_provider_names(),
+                ["Adzuna", "Jobicy", "Jooble", "RemoteOK", "Remotive"],
+            )
 
     def test_missing_credentials_filters_providers(self):
         with patch("app.services.job_sources.registry.get_settings") as mock_settings:
@@ -331,7 +337,7 @@ class TestRegistry(unittest.TestCase):
             )
             from app.services.job_sources.registry import get_providers
             providers = get_providers()
-            self.assertEqual([p.name for p in providers], ["Jobicy"])
+            self.assertEqual([p.name for p in providers], ["Jobicy", "RemoteOK", "Remotive"])
 
     def test_adzuna_only_when_creds(self):
         with patch("app.services.job_sources.registry.get_settings") as mock_settings:
@@ -342,7 +348,7 @@ class TestRegistry(unittest.TestCase):
             )
             from app.services.job_sources.registry import get_providers
             providers = get_providers()
-            self.assertEqual([p.name for p in providers], ["Adzuna", "Jobicy"])
+            self.assertEqual([p.name for p in providers], ["Adzuna", "Jobicy", "RemoteOK", "Remotive"])
 
 
 class TestCapabilities(unittest.TestCase):
@@ -373,6 +379,21 @@ class TestCapabilities(unittest.TestCase):
         self.assertFalse(caps.supports_salary)
         self.assertFalse(caps.supports_pagination)
         self.assertFalse(caps.supports_job_type)
+
+    def test_remoteok_capabilities(self):
+        from app.services.job_sources.remoteok import RemoteOKSource
+        caps = RemoteOKSource().capabilities
+        self.assertFalse(caps.supports_location)
+        self.assertFalse(caps.supports_salary)
+        self.assertFalse(caps.supports_remote)
+
+    def test_remotive_capabilities(self):
+        from app.services.job_sources.remotive import RemotiveSource
+        caps = RemotiveSource().capabilities
+        self.assertTrue(caps.supports_location)
+        self.assertFalse(caps.supports_salary)
+        self.assertFalse(caps.supports_pagination)
+
 
     def test_default_capabilities_empty(self):
         caps = ProviderCapabilities()

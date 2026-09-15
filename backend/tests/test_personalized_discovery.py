@@ -120,9 +120,11 @@ class TestPersonalizedDiscoveryUnit(unittest.TestCase):
         # Must generate 1-2 junior modified queries
         self.assertTrue(any("Junior Python Developer" in q for q in queries))
 
+    @patch("app.services.personalized_discovery.RemotiveSource")
+    @patch("app.services.personalized_discovery.RemoteOKSource")
     @patch("app.services.personalized_discovery.AdzunaSource")
     @patch("app.services.personalized_discovery.JobicySource")
-    def test_source_failure_resilience(self, MockJobicy, MockAdzuna):
+    def test_source_failure_resilience(self, MockJobicy, MockAdzuna, MockRemoteOK, MockRemotive):
         mock_adzuna = MagicMock()
         mock_adzuna.name = "Adzuna"
         mock_adzuna.fetch.side_effect = Exception("Adzuna API timeout")
@@ -132,6 +134,16 @@ class TestPersonalizedDiscoveryUnit(unittest.TestCase):
         mock_jobicy.name = "Jobicy"
         mock_jobicy.fetch.return_value = []
         MockJobicy.return_value = mock_jobicy
+
+        mock_remoteok = MagicMock()
+        mock_remoteok.name = "RemoteOK"
+        mock_remoteok.fetch.return_value = []
+        MockRemoteOK.return_value = mock_remoteok
+
+        mock_remotive = MagicMock()
+        mock_remotive.name = "Remotive"
+        mock_remotive.fetch.return_value = []
+        MockRemotive.return_value = mock_remotive
 
         db = MagicMock()
         mock_profile = Profile(user_id="user_123", preferred_roles="Python Developer", preferred_locations="Pune")
@@ -180,7 +192,32 @@ class TestMultiUserIntegrationAndRanking(unittest.TestCase):
         ])
         self.db.commit()
 
+        # Isolate new always-enabled providers during legacy discovery tests
+        self._p_remoteok_pd = patch("app.services.personalized_discovery.RemoteOKSource")
+        mock_rok_pd = self._p_remoteok_pd.start()
+        mock_rok_pd.return_value.name = "RemoteOK"
+        mock_rok_pd.return_value.fetch.return_value = []
+
+        self._p_remotive_pd = patch("app.services.personalized_discovery.RemotiveSource")
+        mock_rem_pd = self._p_remotive_pd.start()
+        mock_rem_pd.return_value.name = "Remotive"
+        mock_rem_pd.return_value.fetch.return_value = []
+
+        self._p_remoteok_jd = patch("app.services.job_discovery.RemoteOKSource")
+        mock_rok_jd = self._p_remoteok_jd.start()
+        mock_rok_jd.return_value.name = "RemoteOK"
+        mock_rok_jd.return_value.fetch.return_value = []
+
+        self._p_remotive_jd = patch("app.services.job_discovery.RemotiveSource")
+        mock_rem_jd = self._p_remotive_jd.start()
+        mock_rem_jd.return_value.name = "Remotive"
+        mock_rem_jd.return_value.fetch.return_value = []
+
     def tearDown(self):
+        self._p_remoteok_pd.stop()
+        self._p_remotive_pd.stop()
+        self._p_remoteok_jd.stop()
+        self._p_remotive_jd.stop()
         self.db.close()
         Base.metadata.drop_all(self.engine)
 

@@ -10,6 +10,8 @@ from app.services.matching import calculate_match
 from app.services.job_sources.adzuna import AdzunaSource
 from app.services.job_sources.jobicy import JobicySource
 from app.services.job_sources.jooble import JoobleSource
+from app.services.job_sources.remoteok import RemoteOKSource
+from app.services.job_sources.remotive import RemotiveSource
 from app.services.job_sources.base import NormalizedJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -158,7 +160,13 @@ def discover_jobs(user_id: str, db: Session) -> dict:
             ],
         }
 
-    sources = [AdzunaSource(), JobicySource(), JoobleSource()]
+    sources = [
+        AdzunaSource(),
+        JobicySource(),
+        JoobleSource(),
+        RemoteOKSource(),
+        RemotiveSource(),
+    ]
     criteria = SearchCriteria(queries=queries, locations=locations)
     all_fetched: list[NormalizedJob] = []
     errors: list[str] = []

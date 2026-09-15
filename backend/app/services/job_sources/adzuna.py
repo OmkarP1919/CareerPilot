@@ -20,7 +20,7 @@ RESULTS_PER_PAGE = 10
 
 ADZUNA_SUPPORTED_COUNTRIES = {
     "gb", "us", "at", "au", "be", "br", "ca", "ch", "de", "es",
-    "fr", "it", "mx", "nl", "nz", "pl", "ru", "sg", "za",
+    "fr", "it", "mx", "nl", "nz", "pl", "ru", "sg", "za", "in",
 }
 
 
@@ -50,9 +50,15 @@ class AdzunaSource(BaseJobSource):
         app_key = settings.ADZUNA_APP_KEY
         timeout = settings.ADZUNA_TIMEOUT_SECONDS
 
-        target_country = (criteria.country or settings.ADZUNA_COUNTRY or "us").lower()
-        if target_country not in ADZUNA_SUPPORTED_COUNTRIES:
-            target_country = settings.ADZUNA_COUNTRY or "us"
+        if criteria.country:
+            target_country = criteria.country.lower().strip()
+            if target_country not in ADZUNA_SUPPORTED_COUNTRIES:
+                logger.warning("Adzuna does not support requested country '%s'", target_country)
+                return []
+        else:
+            target_country = (settings.ADZUNA_COUNTRY or "us").lower().strip()
+            if target_country not in ADZUNA_SUPPORTED_COUNTRIES:
+                target_country = "us"
 
         if not app_id or not app_key:
             logger.warning("Adzuna API credentials not configured, skipping")
@@ -75,15 +81,6 @@ class AdzunaSource(BaseJobSource):
                     "Adzuna HTTP error %s for country='%s', query='%s'",
                     e.response.status_code, target_country, query,
                 )
-                if target_country != "us":
-                    target_country = "us"
-                    try:
-                        fetched = self._search(app_id, app_key, "us", query, None, timeout, 1, criteria.page_size)
-                        jobs.extend(fetched)
-                    except Exception:
-                        logger.warning("Adzuna US fallback failed for query='%s'", query)
-                else:
-                    logger.warning("Adzuna search failed for query='%s' in country='%s'", query, target_country)
             except (httpx.TimeoutException, httpx.TransportError) as e:
                 source_errors.append("timed out")
                 logger.warning(
@@ -156,6 +153,36 @@ class AdzunaSource(BaseJobSource):
 
             display_location = location_data.get("display_name", "") if isinstance(location_data, dict) else ""
 
+            # Remote / work_mode from upstream remote boolean
+            raw_remote = item.get("is_remote") if item.get("is_remote") is not None else item.get("remote")
+            remote_val = None
+            work_mode_val = None
+            if raw_remote is not None:
+                if raw_remote in (True, 1, "1", "true", "True"):
+                    remote_val = True
+                    work_mode_val = "remote"
+                elif raw_remote in (False, 0, "0", "false", "False"):
+                    remote_val = False
+                    work_mode_val = "onsite"
+
+            # Salary min, max, currency
+            salary_min = None
+            if item.get("salary_min") is not None:
+                try:
+                    salary_min = int(round(float(item["salary_min"])))
+                except (ValueError, TypeError):
+                    salary_min = None
+
+            salary_max = None
+            if item.get("salary_max") is not None:
+                try:
+                    salary_max = int(round(float(item["salary_max"])))
+                except (ValueError, TypeError):
+                    salary_max = None
+
+            raw_currency = item.get("salary_currency") or item.get("currency")
+            salary_currency = str(raw_currency).strip() if raw_currency else None
+
             jobs.append(NormalizedJob(
                 external_id=str(item.get("id", "")),
                 title=item.get("title", "").strip(),
@@ -167,6 +194,12 @@ class AdzunaSource(BaseJobSource):
                 source=self.name,
                 posted_at=posted_at,
                 raw_data=item,
+                country=country,
+                remote=remote_val,
+                work_mode=work_mode_val,
+                salary_min=salary_min,
+                salary_max=salary_max,
+                salary_currency=salary_currency,
             ))
 
         return jobs

@@ -52,9 +52,17 @@ def get_providers() -> list[BaseJobSource]:
     else:
         logger.debug("Jooble provider disabled (API key not configured)")
 
+    # RemoteOK — no API key required (public API)
+    from app.services.job_sources.remoteok import RemoteOKSource
+    providers.append(RemoteOKSource())
+
+    # Remotive — no API key required (public API)
+    from app.services.job_sources.remotive import RemotiveSource
+    providers.append(RemotiveSource())
+
     return providers
 
 
 def get_all_provider_names() -> list[str]:
     """Return names of all known providers (enabled or not)."""
-    return ["Adzuna", "Jobicy", "Jooble"]
+    return ["Adzuna", "Jobicy", "Jooble", "RemoteOK", "Remotive"]
