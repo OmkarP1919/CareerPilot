@@ -4,7 +4,6 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/LanguageContext";
 import { getInitials } from "../utils/formatters";
-import AccountMenu from "./AccountMenu";
 import {
   ChevronDown,
   Sun,
@@ -16,9 +15,7 @@ export default function TopNav({ onAvatarClick }) {
   const { currentUser } = useAuth();
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useTranslation();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
-  const menuRef = useRef(null);
   const langRef = useRef(null);
 
   const displayName = currentUser?.displayName || currentUser?.email?.split("@")[0] || "User";
@@ -26,16 +23,12 @@ export default function TopNav({ onAvatarClick }) {
 
   useEffect(() => {
     const handleClick = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(false);
-      }
       if (langRef.current && !langRef.current.contains(e.target)) {
         setLangMenuOpen(false);
       }
     };
     const handleKey = (e) => {
       if (e.key === "Escape") {
-        setMenuOpen(false);
         setLangMenuOpen(false);
       }
     };
@@ -58,11 +51,7 @@ export default function TopNav({ onAvatarClick }) {
   };
 
   const handleUserBtnClick = () => {
-    if (onAvatarClick && window.innerWidth < 1024) {
-      onAvatarClick();
-    } else {
-      setMenuOpen((p) => !p);
-    }
+    onAvatarClick?.();
   };
 
   return (
@@ -126,13 +115,12 @@ export default function TopNav({ onAvatarClick }) {
           </div>
 
           {/* User Account Menu */}
-          <div className="topnav-user-wrap" ref={menuRef}>
+          <div className="topnav-user-wrap">
             <button
-              className={`topnav-user-btn ${menuOpen ? "open" : ""}`}
+              type="button"
+              className="topnav-user-btn"
               onClick={handleUserBtnClick}
               aria-label="User account menu"
-              aria-expanded={menuOpen}
-              aria-haspopup="true"
             >
               <div className="topnav-avatar">
                 {currentUser?.photoURL ? (
@@ -144,10 +132,6 @@ export default function TopNav({ onAvatarClick }) {
               <span className="topnav-username">{displayName}</span>
               <ChevronDown size={14} className="topnav-chevron" aria-hidden="true" />
             </button>
-
-            {menuOpen && (
-              <AccountMenu onClose={() => setMenuOpen(false)} />
-            )}
           </div>
         </div>
       </div>

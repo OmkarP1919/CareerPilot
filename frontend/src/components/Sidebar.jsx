@@ -35,18 +35,18 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const email = currentUser?.email || "";
   const initials = getInitials(displayName);
 
-  // 4 Primary Navigation Items
+  // Primary Workspace Navigation Items
   const primaryNavItems = [
     { to: "/home", label: t("nav.home", "Home"), icon: Compass },
     { to: "/discover", label: t("nav.jobs", "Jobs"), icon: Briefcase },
     { to: "/pipeline", label: t("nav.pipeline", "Pipeline"), icon: Layers },
     { to: "/resumes", label: t("nav.resumes", "Resumes"), icon: FileText },
+    { to: "/insights", label: t("nav.insights", "Insights"), icon: TrendingUp },
   ];
 
-  // Secondary Navigation Items
+  // Secondary Account Navigation Items
   const secondaryNavItems = [
     { to: "/profile", label: t("nav.profile", "Profile"), icon: User },
-    { to: "/insights", label: t("nav.insights", "Insights"), icon: TrendingUp },
     { to: "/settings", label: t("nav.settings", "Settings"), icon: Settings },
   ];
 

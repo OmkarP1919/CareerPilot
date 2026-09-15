@@ -452,20 +452,21 @@ for (const pattern of forbiddenTrimPatterns) {
 
 console.log("  ok   3. Resume autofill diff, deduplication, and technologies normalization verified");
 // -----------------------------------------------------------------------------
-// 4. Settings Page Contract
+// 4. Settings Page Contract (Phase 7.0C.4 IA / Product Cleanup)
 // -----------------------------------------------------------------------------
 const settingsPagePath = path.join(ROOT, "src", "pages", "SettingsPage.jsx");
 assert.ok(fs.existsSync(settingsPagePath), "SettingsPage.jsx must exist");
 const settingsSrc = fs.readFileSync(settingsPagePath, "utf8");
 
-// Verify 3 genuine groups
+// Verify genuine groups
 assert.ok(
   settingsSrc.includes("settings.account") || settingsSrc.includes("Account Identity"),
   "SettingsPage must include Account Identity group"
 );
 assert.ok(
-  settingsSrc.includes("Job Search Defaults"),
-  "SettingsPage must include Job Search Defaults group"
+  settingsSrc.includes("Career & Job Search Preferences") ||
+  settingsSrc.includes("Career &amp; Job Search Preferences"),
+  "SettingsPage must include Career & Job Search Preferences reference card"
 );
 assert.ok(
   settingsSrc.includes("settings.appearance") || settingsSrc.includes("Appearance & Accessibility"),
@@ -492,20 +493,30 @@ assert.ok(
   "SettingsPage must not fabricate non-existent notification channels"
 );
 
-// Verify Job Search Defaults persistence via /profile
+// Verify duplicate editable job search controls are REMOVED (Profile is single source of truth)
 assert.ok(
-  settingsSrc.includes('api.put("/profile"'),
-  "SettingsPage must persist job preferences via PUT /profile"
+  !settingsSrc.includes('api.put("/profile"'),
+  "SettingsPage must NOT duplicate preference state or persist job preferences via PUT /profile"
 );
 assert.ok(
-  settingsSrc.includes("preferred_roles"),
-  "SettingsPage must manage preferred_roles"
+  !settingsSrc.includes("preferred_roles"),
+  "SettingsPage must NOT manage or edit preferred_roles"
 );
 assert.ok(
-  settingsSrc.includes("preferred_locations"),
-  "SettingsPage must manage preferred_locations"
+  !settingsSrc.includes("preferred_locations"),
+  "SettingsPage must NOT manage or edit preferred_locations"
 );
-console.log("  ok   4. Settings Page 3-group contract and fake-control removal verified");
+
+// Verify clear reference action pointing to /profile
+assert.ok(
+  settingsSrc.includes("Edit in Profile"),
+  "SettingsPage must provide clear 'Edit in Profile' action"
+);
+assert.ok(
+  settingsSrc.includes('to="/profile"'),
+  "SettingsPage reference card must navigate to /profile"
+);
+console.log("  ok   4. Settings Page reference-card contract and single source-of-truth verified");
 
 // -----------------------------------------------------------------------------
 // 5. Protected Files & Shell Files Integrity Check

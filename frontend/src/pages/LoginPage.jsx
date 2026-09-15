@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { signInWithPopup, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider } from "../firebase";
 import { api } from "../services/api";
-import { Eye, EyeOff, Mail, Lock, ArrowRight, AlertCircle, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, ArrowRight, AlertCircle } from "lucide-react";
 
 function formatAuthError(err, defaultFallback = "Sign in failed. Please try again.") {
   if (!err) return defaultFallback;
@@ -11,14 +11,12 @@ function formatAuthError(err, defaultFallback = "Sign in failed. Please try agai
   // Handle backend ApiError (e.g. from /auth/sync, timeout, network, or server down)
   if (err.name === "ApiError" || err.kind) {
     if (err.kind === "network") {
-      return "Unable to reach the backend server. Please verify the backend API is running.";
+      return "Unable to connect to the server. Please check your internet connection and try again.";
     }
     if (err.kind === "server") {
-      return err.message && err.message !== "Something went wrong. Please try again."
-        ? `Backend error: ${err.message}`
-        : "Backend database or server error during sync. Please verify backend database connection.";
+      return "Our service is temporarily unavailable. Please try again in a few moments.";
     }
-    return err.message || "Backend synchronization failed.";
+    return defaultFallback;
   }
 
   // Handle Firebase Auth error codes
@@ -39,15 +37,15 @@ function formatAuthError(err, defaultFallback = "Sign in failed. Please try agai
     case "auth/weak-password":
       return "Password should be at least 6 characters long.";
     case "auth/network-request-failed":
-      return "Network issue connecting to Firebase. Please check your internet connection.";
+      return "Network error. Please check your internet connection and try again.";
     case "auth/popup-blocked":
       return "Sign-in popup was blocked by your browser. Please allow popups for this site.";
     case "auth/unauthorized-domain":
-      return "This domain is not authorized for OAuth in Firebase. Add localhost to Authorized Domains in Firebase Console.";
+      return "This domain is not authorized for sign-in. Please contact support or try another method.";
     case "auth/operation-not-allowed":
-      return "This sign-in method is not enabled in Firebase Console.";
+      return "This sign-in method is currently disabled. Please contact support.";
     default:
-      return err.message || defaultFallback;
+      return defaultFallback;
   }
 }
 

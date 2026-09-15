@@ -1,11 +1,9 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/LanguageContext";
-import { api } from "../services/api";
 import {
   User,
   Palette,
@@ -17,8 +15,7 @@ import {
   Moon,
   Laptop,
   Briefcase,
-  Save,
-  Check,
+  ArrowRight,
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -35,46 +32,6 @@ export default function SettingsPage() {
   } = useTheme();
   const { language, setLanguage, t } = useTranslation();
   const navigate = useNavigate();
-
-  // Job Search Defaults state (persisted via PUT /profile)
-  const [jobPreferences, setJobPreferences] = useState({
-    preferred_roles: "",
-    preferred_locations: "",
-  });
-  const [savingPrefs, setSavingPrefs] = useState(false);
-  const [prefSavedStatus, setPrefSavedStatus] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    api
-      .get("/profile")
-      .then((data) => {
-        if (mounted && data?.profile) {
-          setJobPreferences({
-            preferred_roles: data.profile.preferred_roles || "",
-            preferred_locations: data.profile.preferred_locations || "",
-          });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const handleSavePreferences = async (e) => {
-    e.preventDefault();
-    setSavingPrefs(true);
-    try {
-      await api.put("/profile", jobPreferences);
-      setPrefSavedStatus(true);
-      setTimeout(() => setPrefSavedStatus(false), 3000);
-    } catch {
-      // resilient error handling
-    } finally {
-      setSavingPrefs(false);
-    }
-  };
 
   const handleLogout = async () => {
     try {
@@ -102,7 +59,7 @@ export default function SettingsPage() {
       <header className="page-header">
         <h1 className="settings-main-title">{t("settings.title", "Settings & Preferences")}</h1>
         <p className="settings-main-subtitle">
-          Manage your account identity, workspace appearance, and default job search criteria.
+          Manage your account identity, workspace appearance, and system preferences.
         </p>
       </header>
 
@@ -157,74 +114,31 @@ export default function SettingsPage() {
         </section>
 
         {/* =========================================================================
-            GROUP 2: JOB SEARCH DEFAULTS (PERSISTED VIA /profile)
+            GROUP 2: CAREER & JOB SEARCH PREFERENCES
             ========================================================================= */}
-        <section className="card settings-card" aria-labelledby="settings-search-defaults-heading">
+        <section className="card settings-card" aria-labelledby="settings-career-prefs-heading">
           <div className="card-header settings-card-header">
             <div className="settings-section-title-wrap">
               <Briefcase size={18} className="text-accent" aria-hidden="true" />
-              <h2 id="settings-search-defaults-heading" className="settings-section-title">
-                Job Search Defaults
+              <h2 id="settings-career-prefs-heading" className="settings-section-title">
+                Career &amp; Job Search Preferences
               </h2>
             </div>
           </div>
 
           <div className="card-body settings-card-body">
             <p className="text-secondary text-sm" style={{ marginBottom: "var(--space-4)" }}>
-              These criteria are used as your default search baseline for automated discovery and recommendations.
+              Manage your target roles, preferred locations, and career goals from your Profile.
             </p>
 
-            <form onSubmit={handleSavePreferences} className="settings-prefs-form">
-              <div className="form-group">
-                <label className="form-label" htmlFor="settings-roles">
-                  Default Target Roles
-                </label>
-                <input
-                  id="settings-roles"
-                  className="form-input"
-                  value={jobPreferences.preferred_roles}
-                  onChange={(e) =>
-                    setJobPreferences({ ...jobPreferences, preferred_roles: e.target.value })
-                  }
-                  placeholder="e.g. Senior Frontend Engineer, Full-Stack Developer"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="settings-locations">
-                  Default Preferred Locations
-                </label>
-                <input
-                  id="settings-locations"
-                  className="form-input"
-                  value={jobPreferences.preferred_locations}
-                  onChange={(e) =>
-                    setJobPreferences({ ...jobPreferences, preferred_locations: e.target.value })
-                  }
-                  placeholder="e.g. Remote, San Francisco, CA, New York, NY"
-                />
-              </div>
-
-              <div className="settings-form-actions">
-                <button
-                  type="submit"
-                  className="btn btn-primary btn-sm settings-save-prefs-btn"
-                  disabled={savingPrefs}
-                >
-                  {prefSavedStatus ? (
-                    <>
-                      <Check size={14} aria-hidden="true" />
-                      <span>Saved!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save size={14} aria-hidden="true" />
-                      <span>{savingPrefs ? "Saving..." : "Save Search Defaults"}</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+            <Link
+              to="/profile"
+              className="btn btn-secondary btn-sm"
+              style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}
+            >
+              <span>Edit in Profile</span>
+              <ArrowRight size={14} aria-hidden="true" />
+            </Link>
           </div>
         </section>
 
