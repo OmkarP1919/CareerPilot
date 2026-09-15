@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class JobCreate(BaseModel):
@@ -72,4 +72,56 @@ class PersonalizedDiscoveryResponse(BaseModel):
     matches_created: int
     errors: list[str] = []
     source_statuses: dict[str, str] | None = None
+
+
+# ---------------------------------------------------------------------------
+# 7.0D.1 — Personalized feed (additive; never changes RecommendedJob)
+# ---------------------------------------------------------------------------
+
+
+class FeedJob(RecommendedJob):
+    """Personalized feed entry: the existing RecommendedJob shape plus an
+    additive, factual ``explanation`` sourced directly from the persisted
+    profile-matching row (never invented, never AI-generated)."""
+
+    explanation: str | None = None
+
+
+class FeedJobContext(BaseModel):
+    """Factual, descriptive metadata: WHAT candidate data the feed used.
+
+    This object is purely informational — it never adds to or subtracts
+    from any score.
+    """
+
+    has_profile: bool = False
+    has_skills: bool = False
+    has_projects: bool = False
+    has_experience: bool = False
+    has_education: bool = False
+    has_certifications: bool = False
+    preferred_roles: list[str] = Field(default_factory=list)
+    preferred_locations: list[str] = Field(default_factory=list)
+    experience_level: str | None = None
+
+
+class FeedResponse(BaseModel):
+    """Fast, persisted personalized feed.
+
+    The headline ``match_score`` is the canonical PROFILE MATCH score
+    (frozen 50/20/15/10/5 weights). The endpoint serves persisted
+    recommendations only and performs NO provider fan-out.
+    """
+
+    jobs: list[FeedJob] = Field(default_factory=list)
+    total: int = 0
+    context: FeedJobContext = FeedJobContext()
+    errors: list[str] = Field(default_factory=list)
+    # Populated only when an explicit personalized-discovery run precedes this
+    # response. Feed loads are always the fast path by default.
+    refreshed: bool = False
+    queries_used: list[str] = Field(default_factory=list)
+    new_jobs: int = 0
+    existing_jobs: int = 0
+    matches_created: int = 0
 

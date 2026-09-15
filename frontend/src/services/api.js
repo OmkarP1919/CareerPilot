@@ -127,6 +127,10 @@ export const api = {
     return this.post("/jobs/discover/personalized", {}, DISCOVERY_TIMEOUT_MS);
   },
 
+  getFeed() {
+    return this.get("/jobs/feed");
+  },
+
   discoverFiltered(payload = {}) {
     return this.post("/jobs/discovery/filtered", payload, DISCOVERY_TIMEOUT_MS);
   },

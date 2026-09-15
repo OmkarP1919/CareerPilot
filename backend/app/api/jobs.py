@@ -13,6 +13,9 @@ from app.models.resume_job_analysis import ResumeJobAnalysis
 from app.models.tailored_resume import TailoredResume
 from app.models.cover_letter import CoverLetter
 from app.schemas.job import (
+    FeedJob,
+    FeedJobContext,
+    FeedResponse,
     JobCreate,
     JobUpdate,
     JobResponse,
@@ -20,6 +23,7 @@ from app.schemas.job import (
     RecommendedJob,
     PersonalizedDiscoveryResponse,
 )
+from app.services.discovery_feed import build_feed
 from app.services.job_discovery import discover_jobs, get_recommended_jobs
 from app.services.personalized_discovery import PersonalizedDiscoveryService
 from app.api.job_access import get_own_job
@@ -125,6 +129,59 @@ def list_recommended(
         )
         for r in results
     ]
+
+
+@router.get("/feed", response_model=FeedResponse)
+def personalized_feed(
+    min_score: int = Query(0, ge=0, le=100),
+    source: str = Query(None),
+    remote: bool = Query(False),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Personalized job feed served from persisted profile-matched recommendations.
+
+    This is the FAST page-load path: it performs no provider fan-out and
+    returns instantly. Fresh matches must come from an explicit personalized
+    discovery run first (``POST /jobs/discover/personalized``).
+    """
+    user_id = user.id
+    try:
+        result = build_feed(
+            user_id,
+            db,
+            min_score=min_score,
+            source=source,
+            remote_only=remote,
+        )
+    except Exception:
+        logger.exception("Feed failed for user %s", user_id)
+        raise HTTPException(
+            status_code=500,
+            detail="We couldn't load your job feed right now. Please try again.",
+        )
+    ctx = result["context"]
+    return FeedResponse(
+        jobs=[
+            FeedJob(
+                job=JobResponse.model_validate(r["job"]),
+                match_score=r["match_score"],
+                matched_skills=r["matched_skills"],
+                missing_skills=r["missing_skills"],
+                relevant_projects=r["relevant_projects"],
+                explanation=r.get("explanation"),
+            )
+            for r in result["jobs"]
+        ],
+        total=result["total"],
+        context=FeedJobContext(**ctx),
+        errors=result["errors"],
+        refreshed=result["refreshed"],
+        queries_used=result["queries_used"],
+        new_jobs=result["new_jobs"],
+        existing_jobs=result["existing_jobs"],
+        matches_created=result["matches_created"],
+    )
 
 
 @router.get("/{job_id}", response_model=JobResponse)

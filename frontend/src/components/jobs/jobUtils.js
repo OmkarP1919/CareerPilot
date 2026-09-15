@@ -240,7 +240,9 @@ export function normalizeJob(item, sessionCache = new Map()) {
   }
 
   let fitSummary = null;
-  if (score && score >= 70) {
+  if (item.explanation) {
+    fitSummary = item.explanation;
+  } else if (score && score >= 70) {
     fitSummary = "Strong alignment with your profile and skills";
   }
 

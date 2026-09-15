@@ -125,25 +125,34 @@ export default function JobsPage() {
     }
   }, []);
 
-  // Fetch default personalized/recommended feed
+  // Fetch default personalized/recommended feed.
+  // Prefer the fast persisted feed (/jobs/feed); fall back to the legacy
+  // dual-call path on error or empty feed so manual /role-added jobs still
+  // appear when no personalized recommendations exist yet.
   const loadDefaultFeed = useCallback(async () => {
     setFeedLoading(true);
     setFeedError(null);
     try {
+      const feedRes = await api.getFeed();
+      const feedList = Array.isArray(feedRes?.jobs) ? feedRes.jobs : [];
+      if (feedList.length > 0) {
+        setFeedJobs(
+          feedList.map((item) => normalizeJob(item, sessionCacheRef.current)).filter(Boolean)
+        );
+        return;
+      }
+      // Empty personalized feed: fall back to existing dual path so
+      // manually added roles (no JobMatch yet) are still visible.
       const [allJobsRes, recsRes] = await Promise.all([
         api.get("/jobs/").catch(() => []),
         api.get("/jobs/recommended").catch(() => []),
       ]);
-
       const jobsList = Array.isArray(allJobsRes) ? allJobsRes : [];
       const recsList = Array.isArray(recsRes) ? recsRes : [];
-
       const rawCombined = recsList.length > 0 ? recsList : jobsList;
-      const normalized = rawCombined
-        .map((item) => normalizeJob(item, sessionCacheRef.current))
-        .filter(Boolean);
-
-      setFeedJobs(normalized);
+      setFeedJobs(
+        rawCombined.map((item) => normalizeJob(item, sessionCacheRef.current)).filter(Boolean)
+      );
     } catch {
       setFeedError("Could not load opportunities right now. Please try again.");
       setFeedJobs([]);

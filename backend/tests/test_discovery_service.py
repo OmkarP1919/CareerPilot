@@ -10,7 +10,7 @@ F. Saved search CRUD.
 G. Saved search re-run new-result detection (alert-ready).
 """
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from sqlalchemy import create_engine
@@ -209,13 +209,18 @@ class ServiceIntegrationTest(unittest.TestCase):
 
     @patch.object(ds.DiscoveryOrchestrator, "search_filtered")
     def test_freshness_label_deterministic(self, mock_search):
+        # Fixture relative to the current time (~24h ago) so the post stays in
+        # the "Today"/"This week"/"2 weeks" buckets regardless of calendar date.
+        recent_posted_at = (
+            datetime.now(timezone.utc) - timedelta(days=1)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
         recent = make_job("1", title="Backend Developer", company="Acme",
                           location="Pune", source="Jobicy",
-                          skills=["Python"], posted_at="2026-09-01T10:00:00Z")
+                          skills=["Python"], posted_at=recent_posted_at)
         mock_search.return_value = self._make_outcome([recent])
         req = JobFilterRequest(queries=["backend"], sources=["Jobicy"])
         report = ds.run_filtered_search("u1", self.db, req)
-        # Recent post (within ~3 days of 2026-09-04) -> "Today" or "This week"
+        # Recent post (1 day old) -> "Today" or "This week"
         self.assertIn(report.results[0].freshness, ("Today", "This week", "2 weeks"))
 
     @patch.object(ds.DiscoveryOrchestrator, "search_filtered")
