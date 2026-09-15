@@ -6106,16 +6106,20 @@
 }
 
 /* ================================================
-   10. SETTINGS PAGE (PHASE 7.0B.5 SIMPLIFIED)
+   10. SETTINGS PAGE (POLISHED & STREAMLINED)
    ================================================ */
 .settings-page-unified {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  max-width: 800px;
+  max-width: 768px;
   margin: 0 auto;
   width: 100%;
   padding-bottom: calc(var(--bottom-nav-height, 64px) + var(--space-8));
+}
+
+.settings-header {
+  margin-bottom: 0;
 }
 
 .settings-main-title {
@@ -6128,7 +6132,13 @@
 .settings-main-subtitle {
   font-size: var(--text-sm);
   color: var(--text-secondary);
-  margin: 0;
+  margin-top: var(--space-1);
+}
+
+.settings-sections-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
 .settings-card {
@@ -6136,21 +6146,22 @@
   border-radius: var(--radius-xl);
   background: var(--bg-surface);
   border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .settings-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-4);
-  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-3-5);
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .settings-section-title-wrap {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2-5);
 }
 
 .settings-section-title {
@@ -6163,22 +6174,31 @@
 .settings-user-profile-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-4);
 }
 
+.settings-user-profile-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
 .settings-avatar-circle {
-  width: 56px;
-  height: 56px;
+  width: 54px;
+  height: 54px;
   border-radius: var(--radius-full);
   background: var(--accent);
   color: var(--color-white);
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
   font-weight: var(--weight-bold);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--border);
 }
 
 .settings-avatar-img {
@@ -6191,62 +6211,77 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .settings-user-name {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
   font-weight: var(--weight-bold);
   color: var(--text-primary);
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .settings-user-email {
   font-size: var(--text-sm);
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .settings-verified-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-size: var(--text-xs);
   color: var(--success);
   margin-top: 2px;
+}
+
+.settings-account-action {
+  flex-shrink: 0;
 }
 
 .settings-signout-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 44px;
-  padding: 0 var(--space-5);
-  font-weight: var(--weight-medium);
-}
-
-.settings-prefs-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.settings-form-actions {
-  display: flex;
-  justify-content: flex-start;
-  margin-top: var(--space-2);
-}
-
-.settings-save-prefs-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
   min-height: 40px;
   padding: 0 var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.settings-card-footer {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.settings-appearance-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
 }
 
 .theme-options-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-3);
+}
+
+.text-size-grid {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .theme-option-card {
@@ -6254,14 +6289,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-4);
+  gap: var(--space-1-5);
+  padding: var(--space-3) var(--space-2);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg-surface);
   color: var(--text-secondary);
   cursor: pointer;
   min-height: 52px;
+  font-size: var(--text-sm);
   transition: all var(--duration-fast) var(--ease-default);
 }
 
@@ -6274,16 +6310,34 @@
   border-color: var(--accent);
   background: var(--accent-light);
   color: var(--accent);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-semibold);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.settings-toggles-wrap {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
 }
 
 .setting-toggle-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) 0;
+  padding: var(--space-3-5) 0;
   border-top: 1px solid var(--border-subtle);
   gap: var(--space-4);
+}
+
+.setting-toggle-row strong {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+
+.setting-toggle-row p {
+  margin-top: 2px;
 }
 
 .toggle-switch-btn {
@@ -6319,6 +6373,50 @@ html[data-theme="dark"] .toggle-switch-btn {
 
 .toggle-switch-btn.on .toggle-switch-handle {
   transform: translateX(20px);
+}
+
+/* Career & Job Search Preferences Reference Banner */
+.settings-reference-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  padding: var(--space-5) var(--space-6);
+}
+
+.settings-reference-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.settings-reference-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.settings-reference-desc {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+  margin: 0;
+}
+
+.settings-reference-action {
+  flex-shrink: 0;
+}
+
+.settings-profile-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
 }
 
 /* Responsive adjustments for Profile & Settings */
@@ -6368,15 +6466,75 @@ html[data-theme="dark"] .toggle-switch-btn {
     justify-content: center;
   }
 
-  .settings-signout-btn {
-    width: 100%;
-    justify-content: center;
+  .settings-card {
+    padding: var(--space-4);
   }
 
-  .settings-save-prefs-btn {
+  .settings-user-profile-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+
+  .settings-user-profile-info {
+    width: 100%;
+  }
+
+  .settings-account-action {
+    width: 100%;
+  }
+
+  .settings-signout-btn {
     width: 100%;
     min-height: 44px;
     justify-content: center;
+  }
+
+  .text-size-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .settings-reference-card {
+    padding: var(--space-4);
+  }
+
+  .settings-reference-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+
+  .settings-reference-action {
+    width: 100%;
+  }
+
+  .settings-profile-link {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .theme-options-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-1-5);
+  }
+
+  .theme-option-card {
+    min-height: 48px;
+    padding: var(--space-2) var(--space-1);
+    font-size: var(--text-xs);
+  }
+
+  .theme-option-card svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .text-size-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-2);
   }
 }
 

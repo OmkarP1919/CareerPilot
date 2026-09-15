@@ -56,8 +56,8 @@ export default function SettingsPage() {
   return (
     <div className="page settings-page settings-page-unified">
       {/* Header */}
-      <header className="page-header">
-        <h1 className="settings-main-title">{t("settings.title", "Settings & Preferences")}</h1>
+      <header className="page-header settings-header">
+        <h1 className="settings-main-title">{t("settings.title", "Settings")}</h1>
         <p className="settings-main-subtitle">
           Manage your account identity, workspace appearance, and system preferences.
         </p>
@@ -65,10 +65,10 @@ export default function SettingsPage() {
 
       <div className="settings-sections-stack">
         {/* =========================================================================
-            GROUP 1: ACCOUNT IDENTITY
+            SECTION 1: ACCOUNT IDENTITY
             ========================================================================= */}
-        <section className="card settings-card" aria-labelledby="settings-account-heading">
-          <div className="card-header settings-card-header">
+        <section className="settings-card" aria-labelledby="settings-account-heading">
+          <div className="settings-card-header">
             <div className="settings-section-title-wrap">
               <User size={18} className="text-accent" aria-hidden="true" />
               <h2 id="settings-account-heading" className="settings-section-title">
@@ -77,76 +77,51 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="card-body settings-card-body">
+          <div className="settings-card-body">
             <div className="settings-user-profile-row">
-              <div className="settings-avatar-circle">
-                {photoURL ? (
-                  <img src={photoURL} alt={displayName} className="settings-avatar-img" />
-                ) : (
-                  <span>{displayName.slice(0, 2).toUpperCase()}</span>
-                )}
-              </div>
-              <div className="settings-user-info">
-                <h3 className="settings-user-name">{displayName}</h3>
-                <span className="settings-user-email">{email}</span>
-                <div className="settings-verified-badge">
-                  <CheckCircle2 size={13} className="text-success" aria-hidden="true" />
-                  <span>Authenticated via {authProvider}</span>
+              <div className="settings-user-profile-info">
+                <div className="settings-avatar-circle">
+                  {photoURL ? (
+                    <img src={photoURL} alt={displayName} className="settings-avatar-img" />
+                  ) : (
+                    <span>{displayName.slice(0, 2).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="settings-user-info">
+                  <h3 className="settings-user-name">{displayName}</h3>
+                  <span className="settings-user-email">{email}</span>
+                  <div className="settings-verified-badge">
+                    <CheckCircle2 size={13} className="text-success" aria-hidden="true" />
+                    <span>Authenticated via {authProvider}</span>
+                  </div>
                 </div>
               </div>
+
+              <div className="settings-account-action">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm settings-signout-btn"
+                  onClick={handleLogout}
+                >
+                  <LogOut size={15} aria-hidden="true" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
             </div>
 
-            <div className="settings-account-actions" style={{ marginTop: "var(--space-6)" }}>
-              <button
-                type="button"
-                className="btn btn-secondary settings-signout-btn"
-                onClick={handleLogout}
-              >
-                <LogOut size={16} aria-hidden="true" />
-                <span>Sign Out of CareerPilot</span>
-              </button>
+            <div className="settings-card-footer">
+              <p className="text-xs text-muted">
+                Your account sessions and authentication tokens are managed securely through Firebase Auth.
+              </p>
             </div>
-
-            <p className="text-xs text-muted" style={{ marginTop: "var(--space-4)" }}>
-              Your account sessions and authentication tokens are managed securely through Firebase Auth.
-            </p>
           </div>
         </section>
 
         {/* =========================================================================
-            GROUP 2: CAREER & JOB SEARCH PREFERENCES
+            SECTION 2: APPEARANCE & ACCESSIBILITY
             ========================================================================= */}
-        <section className="card settings-card" aria-labelledby="settings-career-prefs-heading">
-          <div className="card-header settings-card-header">
-            <div className="settings-section-title-wrap">
-              <Briefcase size={18} className="text-accent" aria-hidden="true" />
-              <h2 id="settings-career-prefs-heading" className="settings-section-title">
-                Career &amp; Job Search Preferences
-              </h2>
-            </div>
-          </div>
-
-          <div className="card-body settings-card-body">
-            <p className="text-secondary text-sm" style={{ marginBottom: "var(--space-4)" }}>
-              Manage your target roles, preferred locations, and career goals from your Profile.
-            </p>
-
-            <Link
-              to="/profile"
-              className="btn btn-secondary btn-sm"
-              style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}
-            >
-              <span>Edit in Profile</span>
-              <ArrowRight size={14} aria-hidden="true" />
-            </Link>
-          </div>
-        </section>
-
-        {/* =========================================================================
-            GROUP 3: APPEARANCE & ACCESSIBILITY
-            ========================================================================= */}
-        <section className="card settings-card" aria-labelledby="settings-appearance-heading">
-          <div className="card-header settings-card-header">
+        <section className="settings-card" aria-labelledby="settings-appearance-heading">
+          <div className="settings-card-header">
             <div className="settings-section-title-wrap">
               <Palette size={18} className="text-accent" aria-hidden="true" />
               <h2 id="settings-appearance-heading" className="settings-section-title">
@@ -155,11 +130,11 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="card-body settings-card-body stack" style={{ gap: "var(--space-6)" }}>
-            {/* Color Scheme */}
-            <div>
+          <div className="settings-card-body settings-appearance-body">
+            {/* Interface Theme */}
+            <div className="settings-group">
               <label className="form-label">{t("settings.theme", "Interface Theme")}</label>
-              <div className="theme-options-grid" style={{ marginTop: "var(--space-2)" }}>
+              <div className="theme-options-grid">
                 <button
                   type="button"
                   className={`theme-option-card ${theme === "light" ? "active" : ""}`}
@@ -189,13 +164,13 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Language */}
-            <div>
+            {/* Display Language */}
+            <div className="settings-group">
               <label className="form-label" style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
                 <Globe size={14} aria-hidden="true" />
                 <span>{t("settings.language", "Display Language")}</span>
               </label>
-              <div className="theme-options-grid" style={{ marginTop: "var(--space-2)" }}>
+              <div className="theme-options-grid">
                 <button
                   type="button"
                   className={`theme-option-card ${language === "en" ? "active" : ""}`}
@@ -225,14 +200,14 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Accessibility (Text Size & Motion) */}
-            <div>
+            {/* Reading & Contrast */}
+            <div className="settings-group">
               <label className="form-label" style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
                 <Eye size={14} aria-hidden="true" />
                 <span>{t("settings.accessibility", "Reading & Contrast")}</span>
               </label>
 
-              <div className="theme-options-grid" style={{ marginTop: "var(--space-2)", marginBottom: "var(--space-4)" }}>
+              <div className="theme-options-grid text-size-grid">
                 <button
                   type="button"
                   className={`theme-option-card ${textSize === "sm" ? "active" : ""}`}
@@ -267,37 +242,67 @@ export default function SettingsPage() {
                 </button>
               </div>
 
-              <div className="setting-toggle-row">
-                <div>
-                  <strong>{t("settings.highContrast", "High Contrast")}</strong>
-                  <p className="text-xs text-muted">Enhances active focus rings and border visibility.</p>
+              <div className="settings-toggles-wrap">
+                <div className="setting-toggle-row">
+                  <div>
+                    <strong>{t("settings.highContrast", "High Contrast")}</strong>
+                    <p className="text-xs text-muted">Enhances active focus rings and border visibility.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className={`toggle-switch-btn ${highContrast ? "on" : "off"}`}
+                    onClick={() => setHighContrast(!highContrast)}
+                    aria-pressed={highContrast}
+                    aria-label="Toggle High Contrast"
+                  >
+                    <span className="toggle-switch-handle" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className={`toggle-switch-btn ${highContrast ? "on" : "off"}`}
-                  onClick={() => setHighContrast(!highContrast)}
-                  aria-pressed={highContrast}
-                  aria-label="Toggle High Contrast"
-                >
-                  <span className="toggle-switch-handle" />
-                </button>
-              </div>
 
-              <div className="setting-toggle-row">
-                <div>
-                  <strong>{t("settings.reducedMotion", "Reduce Motion")}</strong>
-                  <p className="text-xs text-muted">Disables non-essential interface animations.</p>
+                <div className="setting-toggle-row">
+                  <div>
+                    <strong>{t("settings.reducedMotion", "Reduce Motion")}</strong>
+                    <p className="text-xs text-muted">Disables non-essential interface animations.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className={`toggle-switch-btn ${reducedMotion ? "on" : "off"}`}
+                    onClick={() => setReducedMotion(!reducedMotion)}
+                    aria-pressed={reducedMotion}
+                    aria-label="Toggle Reduced Motion"
+                  >
+                    <span className="toggle-switch-handle" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className={`toggle-switch-btn ${reducedMotion ? "on" : "off"}`}
-                  onClick={() => setReducedMotion(!reducedMotion)}
-                  aria-pressed={reducedMotion}
-                  aria-label="Toggle Reduced Motion"
-                >
-                  <span className="toggle-switch-handle" />
-                </button>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* =========================================================================
+            SECTION 3: CAREER & JOB SEARCH PREFERENCES (PROFILE REFERENCE)
+            ========================================================================= */}
+        <section className="settings-card settings-reference-card" aria-labelledby="settings-career-prefs-heading">
+          <div className="settings-reference-inner">
+            <div className="settings-reference-content">
+              <div className="settings-section-title-wrap">
+                <Briefcase size={18} className="text-accent" aria-hidden="true" />
+                <h2 id="settings-career-prefs-heading" className="settings-section-title">
+                  Career &amp; Job Search Preferences
+                </h2>
+              </div>
+              <p className="settings-reference-desc">
+                Target roles, preferred locations, and work preferences are managed in your candidate Profile to ensure consistent matching and automated discovery.
+              </p>
+            </div>
+            <div className="settings-reference-action">
+              <Link
+                to="/profile"
+                className="btn btn-secondary btn-sm settings-profile-link"
+              >
+                <span>Edit in Profile</span>
+                <ArrowRight size={14} aria-hidden="true" />
+              </Link>
             </div>
           </div>
         </section>
