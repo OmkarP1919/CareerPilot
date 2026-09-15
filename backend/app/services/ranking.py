@@ -315,7 +315,7 @@ class RankResult:
 
 def load_profile_context(user_id: str, db: Session) -> ProfileRankingContext:
     """Load all candidate profile entities in ONE batch.
-    
+
     Guarantees no O(N) database queries during batch job evaluation.
     """
     profile = db.query(Profile).filter(Profile.user_id == user_id).first()
@@ -815,7 +815,7 @@ def calculate_rank(
     job: Any = None,
 ) -> RankResult:
     """Calculate canonical deterministic match score and factor breakdown (v2).
-    
+
     Operates on preloaded candidate context and job object in memory (O(1)).
     Uses dynamic active-factor re-weighting so unavailable factors do NOT penalize candidates.
     """

@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Any
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.profile import Profile, UserSkill, Project, Experience
