@@ -67,6 +67,12 @@ class MatchInfo(BaseModel):
     role_score: int = 0
     location_score: int = 0
     freshness: int = 0
+    experience_score: Optional[int] = None
+    project_score: Optional[int] = None
+    education_score: Optional[int] = None
+    work_mode_score: Optional[int] = None
+    score_version: Optional[str] = None
+    factors: Optional[list[dict]] = None
     matched_skills: list[str] = Field(default_factory=list)
     missing_skills: list[str] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)

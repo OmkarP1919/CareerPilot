@@ -37,16 +37,48 @@ Run from the `backend/` directory (or with `backend/` on `PYTHONPATH`). It:
   release step runs exactly once, multiple application instances never race to
   create the schema.
 
-## Additive-only policy — `create_all` is NOT a migration engine
+## Additive-only policy & controlled column evolution (Phase 7.0D.3)
 
-`create_all` only **creates missing tables**:
+`create_all` creates missing tables:
 
 - okay: new tables appear on an existing database
-- NOT handled: evolving existing columns/constraints/indexes
+- NOT handled by `create_all`: evolving existing columns/constraints/indexes
 - NOT handled: destructive changes (drops/renames/type changes)
 
-Non-additive schema changes require a deliberate, controlled migration
-strategy in a future cycle. Do not rely on `create_all` for those.
+To evolve existing tables without introducing Alembic or destructive migrations,
+CareerPilot uses a **controlled additive schema evolution mechanism** inside
+`init_schema()` (`app/database/schema_init.py`):
+
+- It defines explicit additive columns for the release:
+  - `job_matches.work_mode_score` (INTEGER, nullable)
+  - `job_matches.education_score` (INTEGER, nullable)
+  - `job_matches.score_version` (VARCHAR, nullable)
+  - `resume_job_analyses.score_version` (VARCHAR, nullable)
+- On PostgreSQL databases, it executes:
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...`
+- On SQLite (testing/local), it checks column existence via SQLAlchemy inspector
+  before executing `ALTER TABLE ... ADD COLUMN ...`.
+- It is completely **idempotent**: running `python -m app.database.init` multiple
+  times is safe and produces no errors or duplicate columns.
+- It is completely **additive and non-destructive**: existing rows remain intact,
+  and new nullable columns default to `NULL` (e.g. existing `score_version` remains
+  `NULL` until explicitly recomputed by canonical scoring).
+
+## Production schema release procedure
+
+During production release of Phase 7.0D.3:
+
+1. Ensure the PostgreSQL database is reachable via `DATABASE_URL`.
+2. Execute the release command once before starting or restarting web workers:
+
+       python -m app.database.init
+
+   (Alternatively, the equivalent idempotent SQL statements may be applied directly:
+   `ALTER TABLE job_matches ADD COLUMN IF NOT EXISTS work_mode_score INTEGER;`
+   `ALTER TABLE job_matches ADD COLUMN IF NOT EXISTS education_score INTEGER;`
+   `ALTER TABLE job_matches ADD COLUMN IF NOT EXISTS score_version VARCHAR;`
+   `ALTER TABLE resume_job_analyses ADD COLUMN IF NOT EXISTS score_version VARCHAR;`)
+3. Only after `python -m app.database.init` exits with code 0, deploy/start the application instances.
 
 ## Failure behavior
 

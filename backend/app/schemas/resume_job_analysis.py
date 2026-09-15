@@ -43,6 +43,7 @@ class ResumeAnalysisResponse(BaseModel):
     education_certification_relevance: EducationCertificationRelevance
     suggestions: list[str]
     note: str | None = None
+    score_version: str | None = None
     created_at: datetime
     updated_at: datetime
 

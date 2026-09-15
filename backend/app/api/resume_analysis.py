@@ -98,6 +98,7 @@ def _to_response(analysis: ResumeJobAnalysis) -> ResumeAnalysisResponse:
         ),
         suggestions=data.get("suggestions") or [],
         note=data.get("note"),
+        score_version=analysis.score_version,
         created_at=analysis.created_at,
         updated_at=analysis.updated_at,
     )
@@ -137,6 +138,7 @@ def analyze_resume(
         existing.experience_score = result["scores"]["experience"] or 0
         existing.project_score = result["scores"]["projects"] or 0
         existing.education_score = result["scores"]["education"] or 0
+        existing.score_version = "v1"
         existing.analysis_data = result
         db.commit()
         db.refresh(existing)
@@ -152,6 +154,7 @@ def analyze_resume(
         experience_score=result["scores"]["experience"] or 0,
         project_score=result["scores"]["projects"] or 0,
         education_score=result["scores"]["education"] or 0,
+        score_version="v1",
         analysis_data=result,
     )
     db.add(analysis)

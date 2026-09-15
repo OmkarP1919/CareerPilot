@@ -203,7 +203,7 @@ class ServiceIntegrationTest(unittest.TestCase):
         report = ds.run_filtered_search("u1", self.db, req)
 
         result = report.results[0]
-        self.assertEqual(set(result.match.missing_skills), {"python", "fastapi"})
+        self.assertEqual(set(result.match.missing_skills), {"react"})
         self.assertEqual(result.match.matched_skills, [])
         # role does not align, location not preferred, but missing skills present
         self.assertLess(result.match.overall_score, 100)

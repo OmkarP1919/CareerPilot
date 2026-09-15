@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Sequence
 
@@ -42,6 +43,11 @@ from sqlalchemy.orm import Session
 from app.models.profile import Profile, UserSkill
 from app.models.saved_search import SavedSearch
 from app.models.user import User
+from app.services.ranking import (
+    calculate_rank,
+    load_profile_context,
+    ProfileRankingContext,
+)
 from app.schemas.discovery import (
     DiscoveryJobHit,
     DiscoveryReport,
@@ -312,78 +318,39 @@ def _tokenize(text: str | None) -> set[str]:
     return set(re.findall(r"[a-z0-9+#.\-]+", text.lower()))
 
 
-def rank_record(record: dict, user_id: str, db: Session) -> dict:
-    """Attach explainable profile-alignment metadata + score to one record.
+def rank_record(
+    record: dict,
+    user_id: str,
+    db: Session,
+    profile_context: ProfileRankingContext | None = None,
+) -> dict:
+    """Attach explainable profile-alignment metadata + score to one record using canonical ranking.
 
     Deterministic and additive. Returns the record with ``match`` added.
     """
-    pp = _profile_payload(user_id, db)
+    if profile_context is None:
+        profile_context = load_profile_context(user_id, db)
     job = record["representative"]
-    job_text = " ".join([
-        job.title or "",
-        job.company or "",
-        job.description or "",
-        " ".join(job.skills or []),
-        job.category or "",
-    ]).lower()
-    job_tokens = _tokenize(job_text)
-
-    profile_skills = [s.lower() for s in pp["skills"]]
-    matched = [s for s in profile_skills if s in job_tokens]
-    missing = [s for s in profile_skills if s not in job_tokens]
-
-    skills_score = round((len(matched) / len(profile_skills)) * 100) if profile_skills else 0
-
-    role_score = 0
-    if pp["preferred_roles"]:
-        if any(role in job_text for role in pp["preferred_roles"]):
-            role_score = 100
-    elif profile_skills:
-        role_score = 50  # neutral when no explicit preferred roles, but skills exist
-
-    location_score = 50  # neutral default (no strong signal)
-    loc = (job.location or "").lower()
-    if pp["preferred_locations"]:
-        if any(pl in loc for pl in pp["preferred_locations"]):
-            location_score = 100
-        else:
-            location_score = 20
-    elif any(term in loc for term in REMOTE_TERMS[:3]):
-        location_score = 60  # remote work is broadly desirable
-
+    rank_result = calculate_rank(profile_context=profile_context, job=job)
     freshness_label, freshness = _freshness_label(job.posted_at)
 
-    overall = round(
-        (skills_score * MATCH_WEIGHTS["skills"]
-         + role_score * MATCH_WEIGHTS["role"]
-         + location_score * MATCH_WEIGHTS["location"]
-         + freshness * MATCH_WEIGHTS["freshness"]) / TOTAL_SCORE
-    )
-
-    reasons: list[str] = []
-    if matched:
-        reasons.append(f"Matches your skills: {', '.join(matched[:5])}"
-                        + ("..." if len(matched) > 5 else ""))
-    if missing:
-        reasons.append(f"Missing skills: {', '.join(missing[:5])}")
-    if role_score == 100:
-        reasons.append("Aligns with a preferred role on your profile.")
-    if location_score == 100:
-        reasons.append("Located in a preferred location.")
-    if freshness_label != "unknown" and freshness_label != "Older":
-        reasons.append(f"Recently posted ({freshness_label}).")
-    if not reasons:
-        reasons.append("General match based on available profile data.")
+    factors_dict = [asdict(f) for f in rank_result.factors]
 
     record["match"] = {
-        "overall_score": overall,
-        "skills_score": skills_score,
-        "role_score": role_score,
-        "location_score": location_score,
+        "overall_score": rank_result.overall_score,
+        "skills_score": rank_result.factor_scores.get("skills") or 0,
+        "role_score": rank_result.factor_scores.get("role") or 0,
+        "location_score": rank_result.factor_scores.get("location") or 0,
+        "experience_score": rank_result.factor_scores.get("experience"),
+        "project_score": rank_result.factor_scores.get("projects"),
+        "education_score": rank_result.factor_scores.get("education"),
+        "work_mode_score": rank_result.factor_scores.get("work_mode"),
+        "score_version": "v2",
         "freshness": freshness,
-        "matched_skills": matched,
-        "missing_skills": missing,
-        "reasons": reasons,
+        "matched_skills": [s.lower() for s in rank_result.matched_skills],
+        "missing_skills": [s.lower() for s in rank_result.missing_skills],
+        "reasons": rank_result.reasons,
+        "factors": factors_dict,
         "is_new": False,
     }
     record["freshness_label"] = freshness_label
@@ -414,14 +381,26 @@ def run_filtered_search(user_id: str, db: Session, request: JobFilterRequest) ->
         key=lambda x: x["source"],
     )
 
+    # Preload candidate profile context ONCE to avoid N+1 queries during ranking
+    profile_context = None
+    if request.include_profile_alignment:
+        profile_context = load_profile_context(user_id, db)
+
     records: list[dict] = []
     for rec in deduped:
         if request.include_profile_alignment:
-            rec = rank_record(rec, user_id, db)
+            rec = rank_record(rec, user_id, db, profile_context=profile_context)
         records.append(rec)
 
     if request.include_profile_alignment:
-        records.sort(key=lambda r: r["match"]["overall_score"], reverse=True)
+        # Canonical sort: overall_score primary, freshness tiebreaker only
+        records.sort(
+            key=lambda r: (
+                r["match"]["overall_score"],
+                r["match"].get("freshness", 0),
+            ),
+            reverse=True,
+        )
 
     results: list[DiscoveryJobHit] = []
     for rec in records:
@@ -435,6 +414,12 @@ def run_filtered_search(user_id: str, db: Session, request: JobFilterRequest) ->
                 role_score=m["role_score"],
                 location_score=m["location_score"],
                 freshness=m["freshness"],
+                experience_score=m.get("experience_score"),
+                project_score=m.get("project_score"),
+                education_score=m.get("education_score"),
+                work_mode_score=m.get("work_mode_score"),
+                score_version=m.get("score_version", "v2"),
+                factors=m.get("factors"),
                 matched_skills=m["matched_skills"],
                 missing_skills=m["missing_skills"],
                 reasons=m["reasons"],

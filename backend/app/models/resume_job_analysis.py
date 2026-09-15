@@ -28,6 +28,7 @@ class ResumeJobAnalysis(Base):
     experience_score = Column(Integer, default=0)
     project_score = Column(Integer, default=0)
     education_score = Column(Integer, default=0)
+    score_version = Column(String, nullable=True)
     analysis_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

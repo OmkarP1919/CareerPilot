@@ -11,6 +11,7 @@ from app.services.job_discovery import (
     normalize_title_company,
     _upsert_match,
 )
+from app.services.ranking import load_profile_context
 from app.services.job_sources.adzuna import AdzunaSource
 from app.services.job_sources.jobicy import JobicySource
 from app.services.job_sources.jooble import JoobleSource
@@ -337,6 +338,12 @@ class PersonalizedDiscoveryService:
             logger.info("Personalized discovery aborted for user %s: no profile", user_id)
             return _empty_result([NO_PROFILE_MESSAGE])
 
+        profile_context = load_profile_context(user_id, db)
+        try:
+            profile._cached_ranking_context = profile_context
+        except Exception:
+            pass
+
         user_skills = [
             us.skill.name
             for us in db.query(UserSkill).filter(UserSkill.profile_id == profile.id).all()
@@ -457,6 +464,7 @@ class PersonalizedDiscoveryService:
                         user_skills_set=user_skills_set,
                         user_projects=projects,
                         user_experiences=experiences,
+                        profile_context=profile_context,
                     )
                     if created:
                         matches_created += 1
@@ -503,6 +511,7 @@ class PersonalizedDiscoveryService:
                     user_skills_set=user_skills_set,
                     user_projects=projects,
                     user_experiences=experiences,
+                    profile_context=profile_context,
                 )
                 if created:
                     matches_created += 1

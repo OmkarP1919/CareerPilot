@@ -14,6 +14,11 @@ class MatchResponse(BaseModel):
     relevant_projects: list[str]
     relevant_experience: list[str]
     explanation: str
+    work_mode_score: int | None = None
+    education_score: int | None = None
+    score_version: str | None = None
+    factors: list[dict] | None = None
+    reasons: list[str] | None = None
 
 
 class SavedMatchResponse(BaseModel):
@@ -30,6 +35,9 @@ class SavedMatchResponse(BaseModel):
     relevant_projects: list[str]
     relevant_experience: list[str]
     explanation: str | None
+    work_mode_score: int | None = None
+    education_score: int | None = None
+    score_version: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
