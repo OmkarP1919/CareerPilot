@@ -75,6 +75,9 @@ declare -ra AUTHORIZED_PROTECTED_COMMITS=(
   # "fix: restore protected file integrity" - restored the three protected
   # files to their baseline blobs after accidental inclusion in 0ce1aa5.
   "2f59bf72422379e702b742e2772033f3edb5e476"
+  # "fix: restore protected resume page baseline" - restored the protected
+  # ResumesPage.jsx to its pinned baseline after the 7.0D.5 heading polish.
+  "6156373e07b9b54895249418d332edcdf0f4fbee"
 )
 
 # Pinned protected HEAD blobs (path|blob). Keep in sync with
