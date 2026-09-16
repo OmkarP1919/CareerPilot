@@ -773,12 +773,13 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+  height: var(--bottom-nav-total-height, calc(60px + env(safe-area-inset-bottom, 0px)));
   background: var(--bg-nav-mobile);
   border-top: 1px solid var(--border);
   z-index: 50;
   backdrop-filter: blur(8px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--safe-area-bottom, env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
 }
 
 .bottom-nav-inner {
@@ -991,10 +992,10 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .main-content {
     padding-top: var(--space-4);
-    padding-bottom: calc(var(--mobile-nav-height) + var(--space-4) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--bottom-nav-total-height, calc(60px + env(safe-area-inset-bottom, 0px))) + var(--space-4));
     padding-left: var(--space-4);
     padding-right: var(--space-4);
   }
@@ -1005,7 +1006,13 @@
   }
 
   .auth-card {
-    padding: var(--space-6);
+    padding: var(--space-5);
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-card {
+    padding: var(--space-4);
   }
 }
 
@@ -1142,7 +1149,7 @@
 
 @media (max-width: 1023px) {
   .app-shell-container {
-    padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: var(--bottom-nav-total-height, calc(60px + env(safe-area-inset-bottom, 0px)));
   }
 }
 

@@ -178,7 +178,12 @@
   /* === Layout & Shell Foundation === */
   --nav-height: 60px;
   --top-header-height: 52px;
-  --mobile-nav-height: 64px;
+  --bottom-nav-base-height: 60px;
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --bottom-nav-total-height: calc(var(--bottom-nav-base-height) + var(--safe-area-bottom));
+  --bottom-nav-height: var(--bottom-nav-total-height);
+  --mobile-nav-height: var(--bottom-nav-base-height);
+  --action-bar-height: 60px;
   --sidebar-width: 236px;
   --max-content: 1240px;
   --max-content-narrow: 920px;

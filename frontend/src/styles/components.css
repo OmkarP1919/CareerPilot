@@ -816,7 +816,7 @@ html[data-theme="dark"] .skeleton {
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
   width: 100%;
-  max-width: 560px;
+  max-width: min(560px, calc(100vw - 32px));
   max-height: 90vh;
   overflow-y: auto;
   padding: var(--space-6);
@@ -824,7 +824,7 @@ html[data-theme="dark"] .skeleton {
 }
 
 .modal-wide {
-  max-width: 920px;
+  max-width: min(920px, calc(100vw - 32px));
 }
 
 .modal-header {
@@ -899,7 +899,7 @@ html[data-theme="dark"] .skeleton {
 
 @media (max-width: 768px) {
   .toast-container {
-    bottom: calc(var(--mobile-nav-height, 64px) + var(--space-4) + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--bottom-nav-total-height) + var(--space-4));
     right: var(--space-4);
     left: var(--space-4);
     align-items: center;
