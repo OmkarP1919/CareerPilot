@@ -758,5 +758,309 @@ class TestRankingServiceIntegrationAndPersistence(unittest.TestCase):
         self.assertEqual(saved.score_version, "v1")
 
 
+class TestLegacyMatchUpgrade(unittest.TestCase):
+    """Explicit tests for Phase 7.0D.3 legacy match upgrade on GET /jobs/{id}/analysis."""
+
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(self.engine)
+        self.Session = sessionmaker(bind=self.engine)
+        self.db = self.Session()
+
+        self.user = User(id="u1", firebase_uid="fb1", email="u1@test.com", name="User 1")
+        self.profile = Profile(
+            id="p1",
+            user_id="u1",
+            preferred_roles="Backend Developer",
+            preferred_locations="Pune, India",
+        )
+        self.sk1 = Skill(id="s1", name="Python")
+        self.sk2 = Skill(id="s2", name="FastAPI")
+        self.us1 = UserSkill(id="us1", profile_id="p1", skill_id="s1", category="lang", skill=self.sk1)
+        self.us2 = UserSkill(id="us2", profile_id="p1", skill_id="s2", category="fw", skill=self.sk2)
+        self.exp = Experience(
+            id="exp1",
+            profile_id="p1",
+            company="Acme Tech",
+            role="Backend Developer",
+            start_date="2022-01-01",
+            end_date="2025-01-01",
+            description="Built Python microservices with FastAPI",
+        )
+        self.edu = Education(
+            id="edu1",
+            profile_id="p1",
+            degree="B.Tech Computer Science",
+            college="Pune University",
+            branch="Computer Science",
+            graduation_year="2022",
+        )
+        self.proj = Project(
+            id="proj1",
+            profile_id="p1",
+            name="API Gateway",
+            description="FastAPI gateway with Redis caching",
+            technologies="Python, FastAPI, Redis",
+        )
+        self.db.add_all([
+            self.user,
+            self.profile,
+            self.sk1,
+            self.sk2,
+            self.us1,
+            self.us2,
+            self.exp,
+            self.edu,
+            self.proj,
+        ])
+        self.db.commit()
+
+        self.app = FastAPI()
+        self.app.include_router(match_router)
+
+        def override_get_db():
+            session = self.Session()
+            try:
+                yield session
+            finally:
+                session.close()
+
+        def override_get_current_user():
+            return self.user
+
+        self.app.dependency_overrides[get_db] = override_get_db
+        self.app.dependency_overrides[get_current_user] = override_get_current_user
+        self.client = TestClient(self.app, raise_server_exceptions=False)
+
+    def tearDown(self):
+        self.db.close()
+        Base.metadata.drop_all(self.engine)
+
+    def test_01_legacy_score_version_none_upgraded_on_get_analysis(self):
+        """Production scenario: legacy row score_version=NULL, overall_score=52 is upgraded to v2."""
+        job = Job(
+            id="j_prod_legacy",
+            user_id="u1",
+            title="Backend Developer",
+            company="TechCorp",
+            location="Pune, India",
+            description="Seeking Backend Developer skilled in Python, FastAPI. Requires Bachelor's in Computer Science.",
+            required_skills="Python, FastAPI",
+            experience_level="mid",
+        )
+        # Legacy row with score_version=None and legacy scores
+        legacy_match = JobMatch(
+            id="m_legacy",
+            user_id="u1",
+            job_id="j_prod_legacy",
+            overall_score=52,
+            skills_score=38,
+            project_score=100,
+            experience_score=20,
+            role_score=100,
+            location_score=20,
+            score_version=None,
+            matched_skills=json.dumps(["Python"]),
+            missing_skills=json.dumps(["FastAPI"]),
+            relevant_projects=json.dumps(["API Gateway"]),
+            relevant_experience=json.dumps(["Backend Developer"]),
+            explanation="Old legacy match.",
+        )
+        self.db.add_all([job, legacy_match])
+        self.db.commit()
+
+        resp = self.client.get("/jobs/j_prod_legacy/analysis")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        # 1. Returned score_version becomes v2
+        self.assertEqual(data["score_version"], "v2")
+
+        # 2. Persisted JobMatch becomes v2
+        persisted = self.db.query(JobMatch).filter(JobMatch.id == "m_legacy").first()
+        self.assertIsNotNone(persisted)
+        self.assertEqual(persisted.score_version, "v2")
+
+        # 3. Overall score is recomputed truthfully from canonical engine
+        canonical_context = load_profile_context("u1", self.db)
+        expected_rank = calculate_rank(profile_context=canonical_context, job=job)
+        self.assertEqual(data["overall_score"], expected_rank.overall_score)
+        self.assertEqual(persisted.overall_score, expected_rank.overall_score)
+        self.assertEqual(data["skills_score"], expected_rank.factor_scores.get("skills"))
+        self.assertEqual(data["education_score"], expected_rank.factor_scores.get("education"))
+
+        # 4. Returned factors match calculate_rank()
+        self.assertIn("factors", data)
+        self.assertIsInstance(data["factors"], list)
+        factor_keys = [f["key"] for f in data["factors"]]
+        self.assertIn("skills", factor_keys)
+        self.assertIn("experience", factor_keys)
+        self.assertIn("role", factor_keys)
+        self.assertIn("projects", factor_keys)
+        self.assertIn("location", factor_keys)
+        self.assertIn("education", factor_keys)
+        self.assertIn("work_mode", factor_keys)
+
+        for factor in data["factors"]:
+            self.assertIn("key", factor)
+            self.assertIn("score", factor)
+            self.assertIn("weight", factor)
+            self.assertIn("available", factor)
+            self.assertIn("evidence", factor)
+
+    def test_02_existing_v2_not_recomputed(self):
+        """Existing score_version == 'v2' rows are NOT recomputed unnecessarily."""
+        job = Job(
+            id="j_v2_existing",
+            user_id="u1",
+            title="Backend Developer",
+            company="TechCorp",
+            location="Pune, India",
+        )
+        v2_match = JobMatch(
+            id="m_v2",
+            user_id="u1",
+            job_id="j_v2_existing",
+            overall_score=77,
+            skills_score=80,
+            project_score=70,
+            experience_score=85,
+            role_score=90,
+            location_score=60,
+            education_score=75,
+            work_mode_score=100,
+            score_version="v2",
+            explanation="Existing v2 result.",
+        )
+        self.db.add_all([job, v2_match])
+        self.db.commit()
+
+        with patch("app.api.match.calculate_rank") as mock_calc:
+            resp = self.client.get("/jobs/j_v2_existing/analysis")
+            self.assertEqual(resp.status_code, 200)
+            mock_calc.assert_not_called()
+
+        data = resp.json()
+        self.assertEqual(data["score_version"], "v2")
+        self.assertEqual(data["overall_score"], 77)
+        self.assertIsNotNone(data["factors"])
+
+    def test_03_ownership_protection_remains_intact(self):
+        """User cannot access or trigger recomputation on another user's job."""
+        other_user = User(id="u2", firebase_uid="fb2", email="u2@test.com", name="User 2")
+        foreign_job = Job(id="j_foreign", user_id="u2", title="Secret Job", company="Co")
+        foreign_match = JobMatch(
+            id="m_foreign",
+            user_id="u2",
+            job_id="j_foreign",
+            overall_score=50,
+            score_version=None,
+        )
+        self.db.add_all([other_user, foreign_job, foreign_match])
+        self.db.commit()
+
+        resp = self.client.get("/jobs/j_foreign/analysis")
+        self.assertEqual(resp.status_code, 404)
+
+        # Verify foreign match was NOT upgraded
+        persisted = self.db.query(JobMatch).filter(JobMatch.id == "m_foreign").first()
+        self.assertIsNone(persisted.score_version)
+
+    def test_04_legacy_row_not_upgraded_if_calculation_fails(self):
+        """Safe transaction: If calculation raises error, row is NOT stamped v2."""
+        job = Job(
+            id="j_fail",
+            user_id="u1",
+            title="Backend Developer",
+            company="FailCorp",
+        )
+        legacy_match = JobMatch(
+            id="m_fail",
+            user_id="u1",
+            job_id="j_fail",
+            overall_score=52,
+            score_version=None,
+        )
+        self.db.add_all([job, legacy_match])
+        self.db.commit()
+
+        with patch("app.api.match.calculate_rank", side_effect=RuntimeError("Calculation explosion")):
+            resp = self.client.get("/jobs/j_fail/analysis")
+            self.assertEqual(resp.status_code, 500)
+
+        # Check DB transaction integrity: row must retain score_version=None
+        persisted = self.db.query(JobMatch).filter(JobMatch.id == "m_fail").first()
+        self.assertIsNone(persisted.score_version)
+        self.assertEqual(persisted.overall_score, 52)
+
+    def test_05_unavailable_factors_not_falsely_represented_as_zero(self):
+        """When job has no education or work mode requirements, available=False."""
+        job = Job(
+            id="j_sparse_factors",
+            user_id="u1",
+            title="Software Developer",
+            company="BasicCorp",
+            location="Pune, India",
+            description="Python development role with FastAPI microservices and PostgreSQL database.",
+            required_skills="Python",
+        )
+        legacy_match = JobMatch(
+            id="m_sparse",
+            user_id="u1",
+            job_id="j_sparse_factors",
+            overall_score=40,
+            score_version=None,
+        )
+        self.db.add_all([job, legacy_match])
+        self.db.commit()
+
+        resp = self.client.get("/jobs/j_sparse_factors/analysis")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        factors_by_key = {f["key"]: f for f in data["factors"]}
+        self.assertIn("education", factors_by_key)
+        self.assertIn("work_mode", factors_by_key)
+
+        # Education requirement is absent from job, so available must be False
+        self.assertFalse(factors_by_key["education"]["available"])
+        self.assertFalse(factors_by_key["work_mode"]["available"])
+
+    def test_06_complete_profile_context_used_in_upgrade(self):
+        """Recomputation utilizes complete profile context (education, projects, experience)."""
+        job = Job(
+            id="j_full_ctx",
+            user_id="u1",
+            title="Backend Developer",
+            company="FullCorp",
+            location="Pune, India",
+            description="Need Python and FastAPI engineer with degree in Computer Science.",
+            required_skills="Python, FastAPI",
+            experience_level="mid",
+        )
+        legacy_match = JobMatch(
+            id="m_full_ctx",
+            user_id="u1",
+            job_id="j_full_ctx",
+            overall_score=30,
+            score_version=None,
+        )
+        self.db.add_all([job, legacy_match])
+        self.db.commit()
+
+        resp = self.client.get("/jobs/j_full_ctx/analysis")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        # Both projects and experience evidence should be populated
+        self.assertIn("API Gateway", data["relevant_projects"])
+        self.assertTrue(len(data["matched_skills"]) >= 2)
+        self.assertEqual(data["score_version"], "v2")
+
+
 if __name__ == "__main__":
     unittest.main()

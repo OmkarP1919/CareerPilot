@@ -38,6 +38,7 @@ class SavedMatchResponse(BaseModel):
     work_mode_score: int | None = None
     education_score: int | None = None
     score_version: str | None = None
+    factors: list[dict] | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

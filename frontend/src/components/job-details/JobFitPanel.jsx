@@ -12,7 +12,6 @@ import {
   GraduationCap,
   FileSearch,
 } from "lucide-react";
-import { useTranslation } from "../../context/LanguageContext";
 
 function FactorBar({ label, weight, value, color = "var(--accent)" }) {
   const pct = Math.min(100, Math.max(0, Math.round(value || 0)));
@@ -45,19 +44,43 @@ export default function JobFitPanel({
   onAnalyzeResume,
   onTailor,
 }) {
-  const { t } = useTranslation();
   const [showExplainer, setShowExplainer] = useState(false);
 
   const overallScore = matchData?.overall_score ?? job?.match_score ?? 0;
   const hasAnalysis = Boolean(matchData);
 
-  const factorScores = {
-    skills: matchData?.skills_score ?? 0,
-    projects: matchData?.project_score ?? 0,
-    experience: matchData?.experience_score ?? 0,
-    role: matchData?.role_score ?? 0,
-    location: matchData?.location_score ?? 0,
+  const FACTOR_LABELS = {
+    skills: "Skills",
+    experience: "Experience",
+    role: "Role Alignment",
+    projects: "Projects",
+    location: "Location",
+    education: "Education",
+    work_mode: "Work Mode",
   };
+
+  const displayFactors = Array.isArray(matchData?.factors)
+    ? matchData.factors
+        .filter((f) => f && f.available === true && f.score !== null && f.score !== undefined)
+        .map((f) => ({
+          key: f.key,
+          label: FACTOR_LABELS[f.key] || f.key,
+          weight: f.weight,
+          score: f.score,
+        }))
+    : [
+        { key: "skills", label: FACTOR_LABELS.skills, weight: 35, score: matchData?.skills_score ?? 0 },
+        { key: "experience", label: FACTOR_LABELS.experience, weight: 20, score: matchData?.experience_score ?? 0 },
+        { key: "role", label: FACTOR_LABELS.role, weight: 15, score: matchData?.role_score ?? 0 },
+        { key: "projects", label: FACTOR_LABELS.projects, weight: 10, score: matchData?.project_score ?? 0 },
+        { key: "location", label: FACTOR_LABELS.location, weight: 10, score: matchData?.location_score ?? 0 },
+        ...(matchData?.education_score !== null && matchData?.education_score !== undefined
+          ? [{ key: "education", label: FACTOR_LABELS.education, weight: 5, score: matchData.education_score }]
+          : []),
+        ...(matchData?.work_mode_score !== null && matchData?.work_mode_score !== undefined
+          ? [{ key: "work_mode", label: FACTOR_LABELS.work_mode, weight: 5, score: matchData.work_mode_score }]
+          : []),
+      ];
 
   const matchedSkills = matchData?.matched_skills || [];
   const missingSkills = matchData?.missing_skills || [];
@@ -68,6 +91,7 @@ export default function JobFitPanel({
   const realEducationEvidence =
     matchData?.education ||
     matchData?.education_certification_relevance?.reason ||
+    matchData?.factors?.find((f) => f.key === "education")?.evidence ||
     null;
 
   const tier =
@@ -123,35 +147,18 @@ export default function JobFitPanel({
           </div>
         </div>
 
-        {/* 5-Factor Score Bars */}
+        {/* Fit Factors Breakdown */}
         <div className="fit-factors-section">
           <h3 className="fit-subheading">Fit Factors Breakdown</h3>
           <div className="fit-factors-bars">
-            <FactorBar
-              label={t("jobDetail.skills", "Skills Alignment")}
-              weight="50%"
-              value={factorScores.skills}
-            />
-            <FactorBar
-              label={t("jobDetail.projects", "Project Relevance")}
-              weight="20%"
-              value={factorScores.projects}
-            />
-            <FactorBar
-              label={t("jobDetail.experience", "Experience Depth")}
-              weight="15%"
-              value={factorScores.experience}
-            />
-            <FactorBar
-              label={t("jobDetail.role", "Role Alignment")}
-              weight="10%"
-              value={factorScores.role}
-            />
-            <FactorBar
-              label={t("jobDetail.location", "Location & Remote")}
-              weight="5%"
-              value={factorScores.location}
-            />
+            {displayFactors.map((factor) => (
+              <FactorBar
+                key={factor.key}
+                label={factor.label}
+                weight={factor.weight != null ? `${factor.weight}%` : ""}
+                value={factor.score}
+              />
+            ))}
           </div>
         </div>
 
@@ -275,15 +282,15 @@ export default function JobFitPanel({
           {showExplainer && (
             <div className="fit-explainer-content">
               <p className="text-xs text-secondary">
-                CareerPilot computes your overall fit using a deterministic, transparent 5-factor weighting model:
+                CareerPilot computes your overall fit using a weighted, dynamically normalized set of profile and job factors:
               </p>
               <ul className="explainer-list text-xs">
-                <li><strong>Skills Alignment (50%):</strong> Matches your declared skills against required technologies.</li>
-                <li><strong>Project Relevance (20%):</strong> Compares project technologies and descriptions against job requirements.</li>
-                <li><strong>Experience Depth (15%):</strong> Evaluates role history and overlapping industry experience.</li>
-                <li><strong>Role Fit (10%):</strong> Title overlap between your target trajectory and the job title.</li>
-                <li><strong>Location & Work Mode (5%):</strong> Remote compatibility and regional alignment.</li>
-                <li><strong>Education Fit:</strong> Assessed when specific degree requirements or resume certifications are evaluated; profile matching prioritizes verified skills, projects, and work history.</li>
+                <li><strong>Skills:</strong> Matches your declared skills against required technologies.</li>
+                <li><strong>Experience:</strong> Evaluates role history and experience depth.</li>
+                <li><strong>Role Alignment:</strong> Measures title overlap and career trajectory compatibility.</li>
+                <li><strong>Projects:</strong> Compares project technologies and descriptions against job requirements.</li>
+                <li><strong>Location:</strong> Evaluates regional compatibility and remote work alignment.</li>
+                <li><strong>Education & Work Mode:</strong> Dynamically evaluated when specific requirements (degrees, certifications, remote/hybrid mode) are specified.</li>
               </ul>
             </div>
           )}
