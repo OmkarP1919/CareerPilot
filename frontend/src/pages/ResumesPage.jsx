@@ -196,7 +196,7 @@ export default function ResumesPage() {
       <header className="page-header">
         <div className="page-header-row">
           <div>
-            <h1>{t("resume.title", "Resumes & Documents")}</h1>
+            <h1>{t("resume.title", "My Resume")}</h1>
             <p>{t("resume.subtitle", "Keep your resumes ready for every opportunity.")}</p>
           </div>
 

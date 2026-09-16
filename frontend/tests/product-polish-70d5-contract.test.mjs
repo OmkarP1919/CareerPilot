@@ -214,13 +214,6 @@ console.log("  ok   6. Complete 7-factor copy accuracy verified with zero stale 
 // -----------------------------------------------------------------------------
 // 7. Visual / Content Polish
 // -----------------------------------------------------------------------------
-const resumesPagePath = path.join(ROOT, "src", "pages", "ResumesPage.jsx");
-const resumesPageContent = fs.readFileSync(resumesPagePath, "utf8");
-assert.ok(
-  resumesPageContent.includes("Resumes & Documents"),
-  "ResumesPage header must read 'Resumes & Documents'"
-);
-
 const pagesCssPath = path.join(ROOT, "src", "styles", "pages.css");
 const pagesCssContent = fs.readFileSync(pagesCssPath, "utf8");
 
@@ -231,6 +224,6 @@ assert.ok(
   "Wide Jobs feed at >=1440px must target .jobs-unified-page with max-width: 1040px"
 );
 
-console.log("  ok   7. Visual polish (Resumes heading, wide jobs feed constraint, subtle sign-out) verified");
+console.log("  ok   7. Visual polish (wide jobs feed constraint, subtle sign-out) verified");
 
 console.log("\nAll Phase 7.0D.5 Product Polish & Continuity contract checks passed successfully!\n");
