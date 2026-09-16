@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getMatchLabel } from "../../utils/constants";
 import {
   Sparkles,
   CheckCircle2,
@@ -94,16 +95,7 @@ export default function JobFitPanel({
     matchData?.factors?.find((f) => f.key === "education")?.evidence ||
     null;
 
-  const tier =
-    overallScore >= 80
-      ? "High Match"
-      : overallScore >= 60
-      ? "Strong Match"
-      : overallScore >= 40
-      ? "Moderate Match"
-      : overallScore > 0
-      ? "Low Match"
-      : "Not Calculated";
+  const tier = getMatchLabel(overallScore);
 
   return (
     <aside className="job-fit-sidebar" aria-label="Job Match and Fit Analysis">

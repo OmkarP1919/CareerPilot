@@ -1,4 +1,4 @@
-import { Bookmark, BookmarkCheck, ArrowRight, Loader2, Sparkles, CheckCircle2, Clock, Building2, MapPin } from "lucide-react";
+import { Bookmark, BookmarkCheck, ArrowRight, Loader2, Sparkles, CheckCircle2, Clock, Building2, MapPin, ExternalLink } from "lucide-react";
 import ScoreBadge from "../ScoreBadge";
 import { formatWorkMode } from "./jobUtils";
 
@@ -7,6 +7,7 @@ export default function JobCard({
   isSaved = false,
   onToggleSave,
   onViewDetails,
+  onExternalApply,
   isMaterializing = false,
   isSaving = false,
 }) {
@@ -50,6 +51,17 @@ export default function JobCard({
   const handleDetailsClick = (e) => {
     e.stopPropagation();
     onViewDetails?.(job);
+  };
+
+  const externalUrl = job.application_url || job.url;
+
+  const handleExternalApply = (e) => {
+    e.stopPropagation();
+    if (onExternalApply) {
+      onExternalApply(job, externalUrl);
+    } else if (externalUrl) {
+      window.open(externalUrl, "_blank", "noopener,noreferrer");
+    }
   };
 
   return (
@@ -162,6 +174,19 @@ export default function JobCard({
         </div>
 
         <div className="job-card-actions">
+          {externalUrl && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm job-card-external-btn"
+              onClick={handleExternalApply}
+              title="Apply Externally"
+              aria-label={`Apply externally for ${title}`}
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              <span>Apply</span>
+            </button>
+          )}
+
           <button
             type="button"
             className={`btn btn-sm ${isSaved ? "btn-secondary" : "btn-ghost"} job-save-btn`}

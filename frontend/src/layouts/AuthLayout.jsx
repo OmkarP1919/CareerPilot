@@ -112,7 +112,7 @@ export default function AuthLayout() {
                   <div className="auth-sidebar-benefits">
                     <div className="sidebar-benefit-item">
                       <CheckCircle2 size={16} className="text-accent flex-shrink-0" />
-                      <span>Transparent 5-factor fit scoring</span>
+                      <span>Transparent 7-factor fit scoring</span>
                     </div>
                     <div className="sidebar-benefit-item">
                       <ShieldCheck size={16} className="text-accent flex-shrink-0" />

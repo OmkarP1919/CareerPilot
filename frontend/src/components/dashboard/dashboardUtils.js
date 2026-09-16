@@ -66,7 +66,7 @@ export function determineNextAction({
       title: "Sync your parsed resume to your profile",
       description: "Transfer your parsed skills, experience, and education to your profile to activate accurate job matching.",
       ctaLabel: "Sync to Profile",
-      ctaLink: "/resumes",
+      ctaLink: "/profile?action=sync",
       ctaIcon: "refresh",
       secondaryLabel: "View Profile",
       secondaryLink: "/profile",

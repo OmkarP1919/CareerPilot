@@ -8,6 +8,7 @@ import JobFilterDrawer from "../components/jobs/JobFilterDrawer";
 import JobCard from "../components/jobs/JobCard";
 import JobFeedHeader from "../components/jobs/JobFeedHeader";
 import AddJobModal from "../components/jobs/AddJobModal";
+import ExternalApplyToast from "../components/jobs/ExternalApplyToast";
 import { normalizeJob, normalizeWorkMode } from "../components/jobs/jobUtils";
 import { SkeletonCard } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
@@ -50,6 +51,7 @@ export default function JobsPage() {
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [externalApplyPromptJob, setExternalApplyPromptJob] = useState(null);
 
   // Session-level materialization cache: canonical_key -> local job ID
   const sessionCacheRef = useRef(new Map());
@@ -332,6 +334,47 @@ export default function JobsPage() {
     }
   };
 
+  // External Application tracking handler
+  const handleExternalApply = (job, targetUrl) => {
+    if (targetUrl) {
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    }
+    setExternalApplyPromptJob(job);
+  };
+
+  const handleConfirmMarkApplied = async (job) => {
+    if (!job) return;
+    let localId = job.id || sessionCacheRef.current.get(job.canonical_key);
+
+    if (!localId) {
+      try {
+        localId = await materializeExternalJob(job);
+        setFeedJobs((prev) =>
+          prev.map((item) =>
+            item.canonical_key === job.canonical_key ? { ...item, id: localId } : item
+          )
+        );
+      } catch {
+        notify("Failed to track application.", "error");
+        return;
+      }
+    }
+
+    try {
+      const apps = await api.get("/applications/").catch(() => []);
+      const existing = Array.isArray(apps) ? apps.find((a) => a.job_id === localId) : null;
+      if (existing?.id) {
+        await api.put(`/applications/${existing.id}`, { status: "Applied" });
+      } else {
+        await api.post("/applications/", { job_id: localId, status: "Applied" });
+      }
+      setSavedJobIds((prev) => new Set([...prev, localId]));
+      notify("Application tracked as Applied in your pipeline.");
+    } catch {
+      notify("Failed to update application status.", "error");
+    }
+  };
+
   // Handle running a saved search
   const handleRunSavedSearchFromDrawer = async (savedSearch) => {
     try {
@@ -546,6 +589,7 @@ export default function JobsPage() {
                   isSaved={isSaved}
                   onToggleSave={handleToggleSave}
                   onViewDetails={handleViewDetails}
+                  onExternalApply={handleExternalApply}
                   isMaterializing={isMaterializing}
                   isSaving={isSaving}
                 />
@@ -589,6 +633,18 @@ export default function JobsPage() {
         }}
         notify={notify}
       />
+
+      {/* External Application Follow-up Toast */}
+      {externalApplyPromptJob && (
+        <ExternalApplyToast
+          job={externalApplyPromptJob}
+          onConfirm={() => {
+            handleConfirmMarkApplied(externalApplyPromptJob);
+            setExternalApplyPromptJob(null);
+          }}
+          onDismiss={() => setExternalApplyPromptJob(null)}
+        />
+      )}
     </div>
   );
 }

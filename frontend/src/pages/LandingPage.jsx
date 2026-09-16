@@ -94,7 +94,7 @@ export default function LandingPage() {
           <div className="landing-hero-trust-bar">
             <span className="trust-item">
               <Check size={14} className="text-success" />
-              <span>Transparent 5-factor scoring</span>
+              <span>Transparent 7-factor scoring</span>
             </span>
             <span className="trust-dot">•</span>
             <span className="trust-item">
@@ -351,7 +351,7 @@ export default function LandingPage() {
               </div>
               <h3 className="landing-step-title">Understand your fit</h3>
               <p className="landing-step-body">
-                See a transparent 5-factor breakdown explaining exactly why you match and pinpointing the precise skills or project context to highlight before applying.
+                See a transparent 7-factor breakdown explaining exactly why you match and pinpointing the precise skills or project context to highlight before applying.
               </p>
             </div>
 

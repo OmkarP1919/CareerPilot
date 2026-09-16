@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
 import { SkeletonCard } from "../components/Skeleton";
@@ -29,10 +30,15 @@ import {
   Calendar,
   RefreshCw,
   AlertCircle,
+  Compass,
+  ArrowRight,
 } from "lucide-react";
 
 export default function ProfilePage() {
   const { currentUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const syncActionRequested = searchParams.get("action") === "sync";
+
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -121,6 +127,32 @@ export default function ProfilePage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Handle action=sync deep-linking from Dashboard
+  useEffect(() => {
+    if (!syncActionRequested || loading) return;
+
+    if (parsedResumeData?.data) {
+      setShowSyncModal(true);
+      searchParams.delete("action");
+      setSearchParams(searchParams, { replace: true });
+    } else {
+      // Determine if a resume exists or if none exists
+      api.get("/resumes").then((resList) => {
+        const safeResumes = Array.isArray(resList) ? resList : [];
+        if (safeResumes.length === 0) {
+          notify("No uploaded resume found. Upload a resume first to sync skills to your profile.", "info");
+        } else {
+          notify("Resume data is still being processed. Please try syncing once parsing completes.", "info");
+        }
+        searchParams.delete("action");
+        setSearchParams(searchParams, { replace: true });
+      }).catch(() => {
+        searchParams.delete("action");
+        setSearchParams(searchParams, { replace: true });
+      });
+    }
+  }, [syncActionRequested, loading, parsedResumeData, searchParams, setSearchParams]);
 
   // Save Career Goals
   const handleSaveGoals = async (e) => {
@@ -424,6 +456,18 @@ export default function ProfilePage() {
           {notification.msg}
         </div>
       )}
+
+      {/* Contextual Discovery Guidance */}
+      <div className="profile-discovery-hint">
+        <Compass size={16} className="text-accent" aria-hidden="true" />
+        <span className="profile-discovery-hint-text">
+          Your skills, target roles, and preferred locations help CareerPilot personalize job matching and discovery.
+        </span>
+        <Link to="/discover" className="profile-discovery-hint-link">
+          <span>View matched jobs</span>
+          <ArrowRight size={13} aria-hidden="true" />
+        </Link>
+      </div>
 
       {/* === 3. Target Career Goals Card === */}
       <section className="card profile-card" aria-labelledby="profile-goals-heading">

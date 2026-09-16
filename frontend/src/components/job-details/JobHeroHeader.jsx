@@ -2,18 +2,10 @@ import { Link } from "react-router-dom";
 import ScoreBadge from "../ScoreBadge";
 import { ArrowLeft, MapPin, Briefcase, Clock, DollarSign } from "lucide-react";
 import { formatWorkMode } from "../jobs/jobUtils";
+import { getMatchLabel } from "../../utils/constants";
 
 export default function JobHeroHeader({ job, score }) {
-  const matchTier =
-    score >= 80
-      ? "High Match"
-      : score >= 60
-      ? "Strong Match"
-      : score >= 40
-      ? "Moderate Match"
-      : score > 0
-      ? "Low Match"
-      : "Match Pending";
+  const matchTier = getMatchLabel(score);
 
   const postedDate = job.created_at
     ? new Date(job.created_at).toLocaleDateString()

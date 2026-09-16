@@ -45,20 +45,22 @@ export const SKILL_CATEGORIES = [
 ];
 
 export const MATCH_THRESHOLDS = {
-  EXCELLENT: 90,
-  STRONG: 75,
-  MODERATE: 50,
+  HIGH: 80,
+  STRONG: 60,
+  MODERATE: 40,
 };
 
 export function getMatchLabel(score) {
-  if (score >= MATCH_THRESHOLDS.EXCELLENT) return "Excellent Match";
+  if (score === null || score === undefined || score <= 0) return "Not Calculated";
+  if (score >= MATCH_THRESHOLDS.HIGH) return "High Match";
   if (score >= MATCH_THRESHOLDS.STRONG) return "Strong Match";
   if (score >= MATCH_THRESHOLDS.MODERATE) return "Moderate Match";
   return "Low Match";
 }
 
 export function getMatchClass(score) {
-  if (score >= MATCH_THRESHOLDS.STRONG) return "score-high match-strong match-excellent";
+  if (score >= MATCH_THRESHOLDS.HIGH) return "score-high match-high match-strong match-excellent";
+  if (score >= MATCH_THRESHOLDS.STRONG) return "score-high match-strong";
   if (score >= MATCH_THRESHOLDS.MODERATE) return "score-medium match-moderate";
   return "score-low match-low";
 }

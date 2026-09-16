@@ -100,7 +100,7 @@ export default function SettingsPage() {
               <div className="settings-account-action">
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm settings-signout-btn"
+                  className="btn btn-ghost btn-sm settings-signout-btn"
                   onClick={handleLogout}
                 >
                   <LogOut size={15} aria-hidden="true" />

@@ -11,6 +11,7 @@ import JobOverviewPanel from "../components/job-details/JobOverviewPanel";
 import JobFitPanel from "../components/job-details/JobFitPanel";
 import TailoredResumeDrawer from "../components/job-details/TailoredResumeDrawer";
 import AnalyzeResumeModal from "../components/job-details/AnalyzeResumeModal";
+import ExternalApplyToast from "../components/jobs/ExternalApplyToast";
 import { ArrowLeft, FileText, CheckCircle2 } from "lucide-react";
 
 export default function JobDetailsPage() {
@@ -34,6 +35,7 @@ export default function JobDetailsPage() {
   const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false);
   const [tailoredResult, setTailoredResult] = useState(null);
   const [coverOpen, setCoverOpen] = useState(false);
+  const [externalApplyPromptJob, setExternalApplyPromptJob] = useState(null);
 
   // Mobile segmented tab ("overview" | "fit")
   const initialTab = searchParams.get("tab") === "fit" ? "fit" : "overview";
@@ -153,6 +155,14 @@ export default function JobDetailsPage() {
     }
   };
 
+  // External Application tracking handler
+  const handleExternalApply = (jobData, url) => {
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+    setExternalApplyPromptJob(jobData);
+  };
+
   // Tailoring result completion
   const handleTailorSuccess = (result) => {
     setTailorModalOpen(false);
@@ -229,6 +239,7 @@ export default function JobDetailsPage() {
         onAnalyzeResume={() => setAnalyzeModalOpen(true)}
         onCoverLetter={() => setCoverOpen(true)}
         onUpdateStatus={handleUpdateStatus}
+        onExternalApply={handleExternalApply}
       />
 
       {/* 3. Mobile Segmented Nav (Visible < 1024px) */}
@@ -292,7 +303,9 @@ export default function JobDetailsPage() {
         savingApp={savingApp}
         onTailor={() => setTailorModalOpen(true)}
         onCoverLetter={() => setCoverOpen(true)}
+        onAnalyzeResume={() => setAnalyzeModalOpen(true)}
         onUpdateStatus={handleUpdateStatus}
+        onExternalApply={handleExternalApply}
         isStickyMobile
       />
 
@@ -341,6 +354,18 @@ export default function JobDetailsPage() {
             setAnalyzeModalOpen(false);
             setTailorModalOpen(true);
           }}
+        />
+      )}
+
+      {/* 10. External Application Follow-up Toast */}
+      {externalApplyPromptJob && (
+        <ExternalApplyToast
+          job={externalApplyPromptJob}
+          onConfirm={async () => {
+            await handleUpdateStatus("Applied");
+            setExternalApplyPromptJob(null);
+          }}
+          onDismiss={() => setExternalApplyPromptJob(null)}
         />
       )}
     </div>

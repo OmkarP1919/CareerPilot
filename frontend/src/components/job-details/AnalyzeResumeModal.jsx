@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import Modal from "../Modal";
 import { api } from "../../services/api";
+import { getMatchLabel } from "../../utils/constants";
 import {
   FileText,
   CheckCircle2,
@@ -96,13 +97,7 @@ export default function AnalyzeResumeModal({
               <div className="fit-score-display" style={{ marginTop: "4px" }}>
                 <span className="fit-score-number font-mono">{analysisResult.overall_score}%</span>
                 <span className={`fit-score-badge ${analysisResult.overall_score >= 70 ? "high" : ""}`}>
-                  {analysisResult.overall_score >= 80
-                    ? "High Match"
-                    : analysisResult.overall_score >= 60
-                    ? "Strong Match"
-                    : analysisResult.overall_score >= 40
-                    ? "Moderate Match"
-                    : "Low Match"}
+                  {getMatchLabel(analysisResult.overall_score)}
                 </span>
               </div>
               <p className="text-secondary text-xs" style={{ marginTop: "var(--space-2)" }}>

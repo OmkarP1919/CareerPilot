@@ -47,7 +47,7 @@ const p3 = determineNextAction({
   interviews: [],
 });
 assert.strictEqual(p3.type, "sync_resume_profile", "Precedence 3 must be sync_resume_profile when hasResumes && !hasProfileSkills");
-assert.strictEqual(p3.ctaLink, "/resumes", "sync_resume_profile must link to /resumes");
+assert.strictEqual(p3.ctaLink, "/profile?action=sync", "sync_resume_profile must link to /profile?action=sync");
 assert.strictEqual(p3.ctaLabel, "Sync to Profile");
 assert.strictEqual(p3.ctaIcon, "refresh");
 
